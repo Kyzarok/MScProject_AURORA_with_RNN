@@ -1,0 +1,38 @@
+Bootstrap: library
+From: airl_lab/default/airl_env:tensorflow_ci
+
+
+%labels
+    Author a.cully@imperial.ac.uk
+    Version v0.0.1
+
+%files
+    ./resources/setup.sh /git/sferes2
+    	
+%post
+   export LD_LIBRARY_PATH="/workspace/lib:$LD_LIBRARY_PATH"
+   # more code can come here
+   # ...
+   # ...
+   #====================================================================================================
+   exit 0 #NOTFORFINAL - the lines below this "exit" will be executed only when building the final image
+   #====================================================================================================
+   cd /git/sferes2/exp/
+   git clone https://gitlab.doc.ic.ac.uk/AIRL/example_tf_sferes.git
+   cd ../
+   ./setup.sh
+
+%runscript
+    CURPATH=$(pwd)
+    if [ ! -d ./results ]; then
+        mkdir results
+    fi
+    cd /git/sferes2/
+    # running the experiment (the -d option allows to define the directory where the results should be stored
+    PATHNAME=$(date +%Y-%m-%d_%H_%M_%S)_$$
+    mkdir $CURPATH/results/$PATHNAME
+    build/exp/example_tf_sferes/example -d $CURPATH/results/$PATHNAME
+    
+
+%help
+    This is the development and running environment of the example_tf_sferes. 
