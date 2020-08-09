@@ -1,5 +1,4 @@
 #!/bin/bash
-
 LOCAL_EXP_PATH=${pwd}'/..'
 IMAGENAME='example_tf_sferes.simg'
 DEFNAME='singularity.def'
@@ -24,8 +23,6 @@ do
 done
 
 echo "Visualisation available after activating the visu_server.sh script at the http://localhost:6080/"
-singularity config fakeroot --add kai
-singularity config fakeroot --enable kai
 
 if $SANDBOX; then
     BLD_ARGS=$BLD_ARGS" --sandbox"
@@ -36,7 +33,6 @@ if [ -f "$IMAGENAME" ] || [ -d "$IMAGENAME" ]; then
     echo "$IMAGENAME exists"
 else
     echo "$IMAGENAME does not exist, building it now from $DEFNAME"
-    singularity build --force --fakeroot $BLD_ARGS $IMAGENAME $DEFNAME 
+    sudo singularity build --force --fakeroot $BLD_ARGS $IMAGENAME $DEFNAME
 fi
-
 singularity shell --fakeroot $RUN_ARGS --bind $(pwd)/../..:/git/sferes2/exp $IMAGENAME

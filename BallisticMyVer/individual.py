@@ -19,6 +19,9 @@ class indiv():
     self.F = 0.0
 
     self._entropy = 0.0
+  
+  def set_bd(self, bd):
+    self.bd = bd
 
   def get_traj(self):
     return self.cart_traj
