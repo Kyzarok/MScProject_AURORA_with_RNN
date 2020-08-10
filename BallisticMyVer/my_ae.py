@@ -11,10 +11,10 @@ class Encoder(nn.Module):
         #               input,  (2,50), 1, 2, (2,6)
         super(Encoder, self).__init__()
         # self.aurora_shape = [-1, 2, 50, 1]
-        self.conv2d = nn.Conv2d(1, 2, (50, 1))
+        self.conv2d = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=(50, 1), stride=1)
         # fc = fc( input, n_in, n_out) 
         if len(conf) == 1:
-            self.fc1 = nn.Linear(1, conf[0])
+            self.fc1 = nn.Linear(2, conf[0])
             self.fc2 = nn.Linear(conf[0], enc_dim)
     
     def forward(self, x):
@@ -39,8 +39,8 @@ class Decoder(nn.Module):
         #input, output_siz, in_ch, out_ch, patch_siz, activation='relu'
         #self.layers[-1],(self.layers[-1].get_shape().as_list()[1], self.layers[-1].get_shape().as_list()[2]), self.layers[-1].get_shape().as_list()[3], conf[i],
                                      #(2, 6), activation='leak_relu')
-        self.conv2d_t1 = nn.ConvTranspose2d(50, 2, (1, 50))
-        self.conv2d_t2 = nn.ConvTranspose2d(2, 1, (1, 1))
+        self.conv2d_t1 = nn.ConvTranspose2d(in_channels=1, out_channels=2, kernel_size=(1, 50), stride=1)
+        self.conv2d_t2 = nn.ConvTranspose2d(in_channels=2, out_channels=1, kernel_size=(1, 1), stride=1)
 
         self.fc3 = nn.Linear(50, output_dim)
     
