@@ -3,7 +3,7 @@ import numpy as np
 
 M = 1.0
 NB_STEP = 50
-DT = 1.0
+DT = 1
 FMAX = 200.0
 
 class indiv():
@@ -49,31 +49,33 @@ class indiv():
     self._gt = self.desc_hardcoded()
 
   def simulate(self, F, theta):
-      a = [F * math.cos(theta) / M, (F * math.sin(theta)-9.81) / M]
-      if F * math.sin(theta) <= 9.81*3 :
-          p = [0, 0]
-          for t in range(NB_STEP):
-            self.cart_traj.append(p)
-            self.polar_traj.append(p)
-      v = [0, 0] # Velocity
-      p = [0, 0] # Position, second value is height
-      polar = [0, 0]
-  
+    a = [F * math.cos(theta) / M, (F * math.sin(theta)-9.81) / M]
+    if F * math.sin(theta) <= 9.81*3 :
+      p = [0.0, 0.0]
+      for t in range(NB_STEP):
+        self.cart_traj.append(p)
+        self.polar_traj.append(p)
+    v = [0.0, 0.0] # Velocity
+    p = [0.0, 0.0] # Position, second value is height
+    polar = [0.0, 0.0]
+
+    self.cart_traj.append(p)
+    self.polar_traj.append(polar)
+
+    for t in range(NB_STEP - 1):
+      v[0] += a[0] * DT
+      v[1] += a[1] * DT
+      p[0] += v[0] * DT
+      p[1] += v[1] * DT
+      a = [0.0, -9.81]
+        
+      if p[1] <= 0.0: # If puck has made contact with the ground
+        p[1] = 0.0
+        a[1] = -0.6*v[1] # Dumping Factor
+        v[1] = 0.0
+      polar = [np.linalg.norm(p), math.atan2(p[1], p[0])]
       self.cart_traj.append(p)
       self.polar_traj.append(polar)
-
-      for t in range(NB_STEP - 1):
-        v += a * DT
-        p += v * DT
-        a = [0, -9.81]
-          
-        if p[1] <= 0: # If puck has made contact with the ground
-            p[1] = 0
-            a[1] = -0.6*v[1] # Dumping Factor
-            v[1] = 0
-        polar = [np.linalg.norm(p), math.atan2(p[1], p[0])]
-        self.cart_traj.append(p)
-        self.polar_traj.append(polar)
 
   def desc_fulldata(self):
     data = np.zeros(1, self.get_flat_obs_size())
