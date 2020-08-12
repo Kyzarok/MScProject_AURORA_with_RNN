@@ -24,7 +24,11 @@ class indiv():
     self.bd = bd
 
   def get_traj(self):
-    return self.cart_traj
+    ret = np.zeros((1, 100))
+    for c in range(NB_STEP):
+      ret[0, c] = self.cart_traj[c][0]
+      ret[0, c + NB_STEP] = self.cart_traj[c][1]
+    return ret
 
   def get_gt(self):
     return self._gt
