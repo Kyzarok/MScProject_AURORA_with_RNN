@@ -44,13 +44,14 @@ def train_ae(autoencoder, population):
         batch_list = make_batches(population)
         print("Beginning Training of Autoencoder")
         for epoch in range(NUM_EPOCH):
-            if epoch % 10 == 0:
+            if epoch % 100 == 0:
                 print("At epoch " + str(epoch))
+                print(str(epoch/NUM_EPOCH * 100) + " of the way there!")
             for batch in batch_list:
                 for member in batch:
                     image = member.get_traj()
-                    _, loss, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                    autoencoder.step()
+                    _, loss, _, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                    # autoencoder.step()
                     avg_loss = np.mean(loss)
                     loss_plot.append(avg_loss)
     print("Training Complete")
