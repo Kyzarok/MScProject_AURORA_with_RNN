@@ -13,6 +13,8 @@ from original_ae import AE
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
+import matplotlib.pyplot as plt
+
 POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
@@ -34,7 +36,7 @@ def make_batches(population):
 
 def train_ae(autoencoder, population):
     autoencoder.reset_optimizer_op
-
+    loss_plot = []
     gpu_options = tf.GPUOptions(allow_growth=True)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
         init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
@@ -42,16 +44,18 @@ def train_ae(autoencoder, population):
         batch_list = make_batches(population)
         print("Beginning Training of Autoencoder")
         for epoch in range(NUM_EPOCH):
-            print("At Epoch: " + str(epoch))
-            print("Current Loss: " + str(autoencoder.loss))
-            print("Current Learning Rate: " + str(autoencoder.learning_rate))
+            if epoch % 10 == 0:
+                print("At epoch " + str(epoch))
             for batch in batch_list:
                 for member in batch:
                     image = member.get_traj()
-                    out = session.run(autoencoder.decoded, feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                    autoencoder.train_step
-
+                    _, loss, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                    autoencoder.step()
+                    avg_loss = np.mean(loss)
+                    loss_plot.append(avg_loss)
     print("Training Complete")
+    plt.plot(loss_plot)
+    plt.show()
     return autoencoder
     
 
@@ -84,6 +88,7 @@ def AURORA_ballistic_task():
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
     my_ae = train_ae(my_ae, pop)
+    exit()
 
     # Use the now trained Autoencoder to get the behavioural descriptors
     with tf.Session() as sess:

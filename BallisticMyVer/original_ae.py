@@ -30,12 +30,18 @@ class AE(object):
 
     def create_optimizer(self):
         self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, 250000, 0.9,name="learning_rate")
-        optimizer=tf.train.AdagradOptimizer(self.learning_rate)
-        gradients, variables = zip(*optimizer.compute_gradients(self.loss))
+        self.optimizer=tf.train.AdagradOptimizer(self.learning_rate)
+        gradients, variables = zip(*self.optimizer.compute_gradients(self.loss))
         gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
-        self.train_step = optimizer.apply_gradients(zip(gradients, variables), name="train_step")
+        self.train_step = self.optimizer.apply_gradients(zip(gradients, variables), name="train_step")
         
-        self.reset_optimizer_op = tf.variables_initializer(optimizer.variables(), name="reset_optimizer")
+        self.reset_optimizer_op = tf.variables_initializer(self.optimizer.variables(), name="reset_optimizer")
+
+    
+    def step(self):
+        gradients, variables = zip(*self.optimizer.compute_gradients(self.loss))
+        gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
+        self.optimizer.apply_gradients(zip(gradients, variables))
 
     def create_net(self):
         self.layers=[self.x_image]
