@@ -21,6 +21,15 @@ POPULATION_LIMIT = 10000
 NUM_EPOCH = 25000
 BATCH_SIZE = 20000
 
+NB_RETRAIN = 5
+NB_QD_ITERATIONS = 10000
+
+MUTATION_RATE = 0.1
+ETA = 10
+
+NOVELTY_THRESHOLD = 0
+K_NEAREST_NEIGHBOURS = 15
+
     
 def make_batches(population):
     pop_left = len(population)
@@ -35,30 +44,58 @@ def make_batches(population):
     return batches
 
 def train_ae(autoencoder, population):
+    # Reset the optimizer
     autoencoder.reset_optimizer_op
     loss_plot = []
     gpu_options = tf.GPUOptions(allow_growth=True)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
-        init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
-        session.run(init_all_vars_op) 
+        # Make batches
         batch_list = make_batches(population)
         print("Beginning Training of Autoencoder")
+        loss = 0
         for epoch in range(NUM_EPOCH):
-            if epoch % 100 == 0:
-                print("At epoch " + str(epoch))
-                print(str(epoch/NUM_EPOCH * 100) + " of the way there!")
+            if epoch % 250 == 0:
+                print("At epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + " of the way there!")
             for batch in batch_list:
                 for member in batch:
-                    image = member.get_traj()
+                    image = member.get_traj_image()
                     _, loss, _, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
                     # autoencoder.step()
-                    avg_loss = np.mean(loss)
-                    loss_plot.append(avg_loss)
+            avg_loss = np.mean(loss)
+            loss_plot.append(avg_loss)
     print("Training Complete")
     plt.plot(loss_plot)
+    plt.xlabel("Epoch")
+    plt.ylabel("Reconstruction Loss")
     plt.show()
     return autoencoder
+
+def calculate_novelty_threshold(latent_space):
+    return novelty_threshold
+
+
+def mutate(indiv_params):
+    new_indiv = individual.indiv()
+    new_indiv.eval(indiv_params)
+    return new_indiv
     
+def calculate_novelty(this_bd, latent_space):
+    distance_from_k_nearest_neighbours = []
+    for coord in latent_space:
+        dist = np.linalg.norm(this_bd - coord)
+        if len(distance_from_k_nearest_neighbours) < K_NEAREST_NEIGHBOURS:
+            distance_from_k_nearest_neighbours.append(dist)
+        else:
+            # Sort list so that minimum novelty is at the start
+            distance_from_k_nearest_neighbours.sort()
+            # Is new novelty larger?
+            if dist > distance_from_k_nearest_neighbours[0]:
+                distance_from_k_nearest_neighbours[0] = dist
+
+    # Get true novelty
+    novelty = distance_from_k_nearest_neighbours.sort()[-1]
+
+    return novelty
 
 def AURORA_ballistic_task():
     # Randomly generate some controllers
@@ -81,31 +118,62 @@ def AURORA_ballistic_task():
     # Create the dimension reduction algorithm (the Autoencoder)
     my_ae = AE()
 
-    # # Initialise
-    # gpu_options = tf.GPUOptions(allow_growth=True)
-    # with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as sess:
-    #     init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
-    #     sess.run(init_all_vars_op)   
+    # Initialize variables
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
+        init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
+        session.run(init_all_vars_op) 
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
     my_ae = train_ae(my_ae, pop)
-    exit()
+
+    # Create container for laten space representation
+    latent_space = []
 
     # Use the now trained Autoencoder to get the behavioural descriptors
     with tf.Session() as sess:
         for member in pop:
-            traj = member.get_traj()
+            image = member.get_traj_image()
             # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-            member_bd = sess.run(my_ae.latent, feed_dict={"input_x" : traj, "keep_prob" : 0, "step_id" : 1})
+            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
             member.set_bd(member_bd)
-        
+            latent_space.append(member_bd)
+    
+    # Main algorithm loop
     # Randomly intialize the QD algorithm
-    # QD loop
-    # For each iteration: 1. Randomly select a controller
-    #                     2. Mutate it
-    #                     3. Evaluate the new controller and try to put it into the collection
+    with tf.Session() as sess:
+        for i in range(NB_RETRAIN):
+            for j in range(NB_QD_ITERATIONS):
+                # QD loop
+                # For each iteration: 1. Randomly select a controller
+                #                     2. Mutate it
+                #                     3. Evaluate the new controller
+                #                     4. Try to put it into the collection
 
-    # Retrain Autoencoder after a number of QD iterations
+                # 1. Randomly select a controller from the population
+                this_indiv = random.choice(pop)
+                controller = this_indiv.get_key()
+
+                # 2. Mutate the chosen controller
+                new_indiv = mutate(controller)
+
+                # 3. Evaluate i.e. get the eval function
+                image = new_indiv.get_traj_image()
+                new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+
+                # 4. See if the new Behavioural Descriptor is novel enough
+                novelty = calculate_novelty(new_bd, latent_space)
+
+                # If the new individual is has novel behaviour, add it to the population and the bd to the latent space
+                if novelty >= NOVELTY_THRESHOLD:
+                    new_indiv.set_bd(new_bd)
+                    latent_space.append(new_bd)
+                    pop.append(new_indiv)
+
+            # Retrain Autoencoder after a number of QD iterations
+            my_ae = train_ae(my_ae, pop)
+
+
 
 
 if __name__ == "__main__":

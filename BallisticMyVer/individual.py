@@ -18,12 +18,17 @@ class indiv():
     self.theta = 0.0
     self.F = 0.0
 
+    self.key = []
+
     self._entropy = 0.0
   
   def set_bd(self, bd):
     self.bd = bd
 
-  def get_traj(self):
+  def get_key(self):
+    return self.key
+
+  def get_traj_image(self):
     ret = np.zeros((1, 100))
     for c in range(NB_STEP):
       ret[0, c] = self.cart_traj[c][0]
@@ -47,6 +52,7 @@ class indiv():
     return len(self.cart_traj) * len(self.cart_traj[0])
 
   def eval(self, ind):
+    self.key = ind
     self.theta = ind[0] * math.pi/2
     self.F = ind[1]*FMAX
     self.simulate(self.F,self.theta)
