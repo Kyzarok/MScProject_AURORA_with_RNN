@@ -21,9 +21,28 @@ class indiv():
     self.key = []
 
     self._entropy = 0.0
+
+    self.novelty = 0.0
   
   def set_bd(self, bd):
     self.bd = bd
+
+  def get_bd(self):
+    return self.bd
+
+  def set_novelty(self, nov):
+    self.novelty = nov
+  
+  def get_novelty(self):
+    return self.novelty
+
+  def is_dead(self):
+    zero = np.zeros(2, 50)
+    if zero == self.cart_traj:
+      return True
+    else:
+      return False
+
 
   def get_key(self):
     return self.key

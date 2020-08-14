@@ -26,9 +26,13 @@ NB_QD_ITERATIONS = 10000
 
 MUTATION_RATE = 0.1
 ETA = 10
+EPS = 0.1
 
-NOVELTY_THRESHOLD = 0
 K_NEAREST_NEIGHBOURS = 15
+INITIAL_NOVLETY = 0.01
+
+FIT_MIN = 0.001
+FIT_MAX = 0.999
 
     
 def make_batches(population):
@@ -55,7 +59,7 @@ def train_ae(autoencoder, population):
         loss = 0
         for epoch in range(NUM_EPOCH):
             if epoch % 250 == 0:
-                print("At epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + " of the way there!")
+                print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "%% of the way there!")
             for batch in batch_list:
                 for member in batch:
                     image = member.get_traj_image()
@@ -70,32 +74,111 @@ def train_ae(autoencoder, population):
     plt.show()
     return autoencoder
 
+def prep_apply(data):
+    scaled_data = data
+    return scaled_data
+
 def calculate_novelty_threshold(latent_space):
-    return novelty_threshold
+    X = np.array(latent_space)
+
+    XX = []
+    for row in latent_space:
+        sigma = 0
+        for el in row:
+            sigma += el**2
+        XX.append(sigma)
+    XX = np.array(XX)
+
+    XY = (2*X) @ X.T
+
+    dims = XX.shape
+    print(dims)
+
+    dist = XX @ np.ones(1, dims[0])
+    dist += np.ones(dims[0], 1) @ XX.T
+    dist -= XY
+
+    maxdist = np.sqrt(np.max(dist))
+
+    #  arbitrary value to have a specific "resolution"
+    K = 60000
+    
+    new_novelty = maxdist/np.sqrt(K)
+    return new_novelty
 
 
-def mutate(indiv_params):
+def mut_eval(indiv_params):
     new_indiv = individual.indiv()
     new_indiv.eval(indiv_params)
     return new_indiv
+
+def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population):
+    dominated_indiv = -1
+    # If novelty threshold is greater than the nearest neighbour but less than the second nearest neighbour
+    if (curr_threshold > dist_from_k_n_n[0]) and (curr_threshold < dist_from_k_n_n[1]):
+
+        pop_without_x_2 = population
+        del pop_without_x_2[k_n_n[0]]
+        x_1_novelty, _, _ = dist_from_k_n_n[1]
+        x_2_novelty, _, _ = calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
+
+        # Find if exclusive eta dominance is met according to Cully QD Framework
+        # First Condition
+        if x_1_novelty >= (1 - ETA) * x_2_novelty:
+            # The Second Condition measures Quality, i.e. a fitness function
+            # In AURORA this does not exist as having such a defeats the purpose of autonomous discovery
+            # I have included because why the hell not
+            # if Q(new_indiv) >= (1 - ETA) * Q(nearest_neighbour)
+
+            # The Third Condition is another bound that measures the combination of Novelty and Quality
+            #             Quality
+            #               |      .
+            #               |      .    Idea is that this area 
+            #               |      .    dominates
+            #               |      ........
+            #               |
+            #               |
+            #                -------------- Novelty
+
+            dominated_indiv = k_n_n[0]
+
+    return dominated_indiv, x_1_novelty
+
     
-def calculate_novelty(this_bd, latent_space):
-    distance_from_k_nearest_neighbours = []
-    for coord in latent_space:
-        dist = np.linalg.norm(this_bd - coord)
-        if len(distance_from_k_nearest_neighbours) < K_NEAREST_NEIGHBOURS:
-            distance_from_k_nearest_neighbours.append(dist)
-        else:
-            # Sort list so that minimum novelty is at the start
-            distance_from_k_nearest_neighbours.sort()
-            # Is new novelty larger?
-            if dist > distance_from_k_nearest_neighbours[0]:
-                distance_from_k_nearest_neighbours[0] = dist
+def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
+    # If the population is still too small
+    if len(population) < K_NEAREST_NEIGHBOURS:
+        novelty = 99999
+        return novelty
+    else:
+        k_n_n = []
+        dist_from_k_n_n = []
+        for member in range(len(population)):
+            coord = population[member].get_bd()
+            dist = np.linalg.norm(this_bd - coord)
+            if len(dist_from_k_n_n) < K_NEAREST_NEIGHBOURS:
+                dist_from_k_n_n.append(dist)
+                k_n_n.append(member)
+            else:
+                # Sort lists so that minimum novelty is at the start
+                k_n_n = [x for _,x in sorted(zip(dist_from_k_n_n, k_n_n))]
+                dist_from_k_n_n.sort()
+                # Is new novelty larger?
+                if dist < dist_from_k_n_n[-1]:
+                    dist_from_k_n_n[-1] = dist
+                    k_n_n[-1] = member
 
-    # Get true novelty
-    novelty = distance_from_k_nearest_neighbours.sort()[-1]
+        # Sort lists so that minimum novelty is at the start
+        k_n_n = [x for _,x in sorted(zip(dist_from_k_n_n, k_n_n))]
+        dist_from_k_n_n.sort()
+        novelty = dist_from_k_n_n[0]
 
-    return novelty
+        dominated_indiv = -1
+
+        if check_dominate:
+            dominated_indiv, novelty = does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population)
+
+        return novelty, dominated_indiv
 
 def AURORA_ballistic_task():
     # Randomly generate some controllers
@@ -139,39 +222,86 @@ def AURORA_ballistic_task():
             member.set_bd(member_bd)
             latent_space.append(member_bd)
     
-    # Main algorithm loop
+   
     # Randomly intialize the QD algorithm
+    # Calculate starting novelty threshold
+    threshold = INITIAL_NOVLETY
+
+    # Main algorithm loop
     with tf.Session() as sess:
+
+        # Loop for controlling number of times Autoencoder is retrained
         for i in range(NB_RETRAIN):
+            # Begin Quality Diversity iterations
+            print("Beginning QD iterations")
             for j in range(NB_QD_ITERATIONS):
-                # QD loop
-                # For each iteration: 1. Randomly select a controller
-                #                     2. Mutate it
-                #                     3. Evaluate the new controller
-                #                     4. Try to put it into the collection
+                if j%100 == 0:
+                    print("At QD iteration" + str(j) + ", we're " + str(j/NB_QD_ITERATIONS * 100) + "%% of the way there!")
 
                 # 1. Randomly select a controller from the population
                 this_indiv = random.choice(pop)
                 controller = this_indiv.get_key()
 
-                # 2. Mutate the chosen controller
-                new_indiv = mutate(controller)
+                # 2. Mutate and evaluate the chosen controller
+                new_indiv = mut_eval(controller)
 
-                # 3. Evaluate i.e. get the eval function
+                # 3. Get the Behavioural Descriptor for the new individual
                 image = new_indiv.get_traj_image()
                 new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
 
                 # 4. See if the new Behavioural Descriptor is novel enough
-                novelty = calculate_novelty(new_bd, latent_space)
+                novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
 
-                # If the new individual is has novel behaviour, add it to the population and the bd to the latent space
-                if novelty >= NOVELTY_THRESHOLD:
+                # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
+                if dominated == -1:                           #    If the individual did not dominate another individual
+                    if novelty >= threshold:                  #    If the individual is novel
+                        new_indiv.set_bd(new_bd)
+                        new_indiv.set_novelty(novelty)
+                        pop.append(new_indiv)
+                else:                                         #    If the individual dominated another individual
                     new_indiv.set_bd(new_bd)
-                    latent_space.append(new_bd)
-                    pop.append(new_indiv)
+                    new_indiv.set_novelty(novelty)
+                    pop[dominated] = new_indiv
+            print("Finished QD iterations")
 
-            # Retrain Autoencoder after a number of QD iterations
+            # 6. Retrain Autoencoder after a number of QD iterations
+            print("Calling Autoencoder retrain")
             my_ae = train_ae(my_ae, pop)
+            print("Completed retraining")
+
+            # 7. Clear latent space
+            latent_space = []
+
+            # 8. Assign the members of the population the new Behavioural Descriptors
+            #    and refill the latent space
+            for member in pop:
+                image = member.get_traj_image()
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member.set_bd(member_bd)
+                latent_space.append(member_bd)
+
+            # 9. Calculate new novelty threshold to ensure population size less than 10000
+            threshold = calculate_novelty_threshold(latent_space)
+            print("New novelty threshold is " + str(threshold))
+
+            # 10. Update population so that only members with novel bds are allowed
+            print("Add viable members back to population")
+            new_pop = []
+            for member in pop:
+                this_bd = member.get_bd()
+                novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
+                if dominated == -1:                           #    If the individual did not dominate another individual
+                    if novelty >= threshold:                  #    If the individual is novel
+                        new_indiv.set_bd(member)
+                        member.set_novelty(novelty)
+                        new_pop.append(member)
+                else:                                         #    If the individual dominated another individual
+                    member.set_bd(new_bd)
+                    member.set_novelty(novelty)
+                    new_pop[dominated] = member
+
+            pop = new_pop
+
 
 
 
