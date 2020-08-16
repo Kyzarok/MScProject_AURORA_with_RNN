@@ -19,12 +19,11 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 # NUM_EPOCH = 25000
-NUM_EPOCH = 10
+NUM_EPOCH = 250
 BATCH_SIZE = 20000
 
-NB_RETRAIN = 1#5
-# NB_QD_ITERATIONS = 10000
-NB_QD_ITERATIONS = 10
+NB_RETRAIN = 5
+NB_QD_ITERATIONS = 10000
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -49,7 +48,7 @@ def make_batches(population):
         pop_left -= BATCH_SIZE
     return batches
 
-def train_ae(autoencoder, population):
+def train_ae(autoencoder, population, trained_this_many):
     # Reset the optimizer
     autoencoder.reset_optimizer_op
     loss_plot = []
@@ -81,7 +80,12 @@ def train_ae(autoencoder, population):
     plt.plot(loss_plot)
     plt.xlabel("Epoch")
     plt.ylabel("Reconstruction Loss")
-    plt.title("Training Loss")
+    title = None
+    if trained_this_many == 1:
+        title = "Training Loss, Autoencoder Trained " + str(trained_this_many) + " time"
+    else:
+        title = "Training Loss, Autoencoder Trained " + str(trained_this_many) + " times"
+    plt.title(title)
     plt.show()
     return autoencoder
 
@@ -149,6 +153,7 @@ def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population):
 
         pop_without_x_2 = population.copy()
         del pop_without_x_2[k_n_n[0]]
+        print(dist_from_k_n_n)
         x_1_novelty, _, _ = dist_from_k_n_n[1]
         x_2_novelty, _, _ = calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
 
@@ -213,7 +218,7 @@ def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
 
         return novelty, dominated_indiv
 
-def plot_latent(population):
+def plot_latent(population, trained_this_many):
     x = []
     y = []
     for member in population:
@@ -224,7 +229,12 @@ def plot_latent(population):
     plt.scatter(x, y, c='b')
     plt.xlabel("Encoded dimension 1")
     plt.ylabel("Encoded dimension 2")
-    plt.title("Latent Space")
+    title = None
+    if trained_this_many == 1:
+        title = "Latent Space, Autoencoder Trained " + str(trained_this_many) + " time"
+    else:
+        title = "Latent Space, Autoencoder Trained " + str(trained_this_many) + " times"
+    plt.title(title)
     plt.show()
 
 def AURORA_ballistic_task():
@@ -257,7 +267,7 @@ def AURORA_ballistic_task():
         # save_path_init = my_ae.saver.save(session, "../resources/model_init.ckpt")
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae = train_ae(my_ae, pop)
+    my_ae = train_ae(my_ae, pop, 1)
 
     # Create container for laten space representation
     latent_space = []
@@ -286,6 +296,7 @@ def AURORA_ballistic_task():
 
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
+            print("Current size of population " + len(pop))
             for j in range(NB_QD_ITERATIONS):
                 if j%100 == 0:
                     print("At QD iteration " + str(j) + ", we're " + str(j/NB_QD_ITERATIONS * 100) + "% of the way there!")
@@ -318,7 +329,7 @@ def AURORA_ballistic_task():
 
         # 6. Retrain Autoencoder after a number of QD iterations
         print("Calling Autoencoder retrain")
-        my_ae = train_ae(my_ae, pop)
+        my_ae = train_ae(my_ae, pop, i+2)
         print("Completed retraining")
 
         # 7. Clear latent space
@@ -354,7 +365,7 @@ def AURORA_ballistic_task():
                 new_pop[dominated] = member
 
         pop = new_pop
-        plot_latent(pop)
+        plot_latent(pop, j + 1)
 
 
 
