@@ -3,7 +3,7 @@ import numpy as np
 
 M = 1.0
 NB_STEP = 50
-DT = 1
+DT = 1.0
 FMAX = 200.0
 
 class indiv():
@@ -94,6 +94,7 @@ class indiv():
     self._gt = self.desc_hardcoded()
 
   def simulate(self, F, theta):
+    print("BEGINNING")
     a = [F * math.cos(theta) / M, (F * math.sin(theta)-9.81) / M]
     if F * math.sin(theta) <= 9.81*3 :
       p = [0.0, 0.0]
@@ -103,8 +104,8 @@ class indiv():
     v = [0.0, 0.0] # Velocity
     p = [0.0, 0.0] # Position, second value is height
     polar = [0.0, 0.0]
-
-    self.cart_traj.append(p)
+    append_type = p.copy()
+    self.cart_traj.append(append_type)
     self.polar_traj.append(polar)
 
     for t in range(NB_STEP - 1):
@@ -119,7 +120,8 @@ class indiv():
         a[1] = -0.6*v[1] # Dumping Factor
         v[1] = 0.0
       polar = [np.linalg.norm(p), math.atan2(p[1], p[0])]
-      self.cart_traj.append(p)
+      append_type = p.copy()
+      self.cart_traj.append(append_type)
       self.polar_traj.append(polar)
 
   def desc_fulldata(self):
