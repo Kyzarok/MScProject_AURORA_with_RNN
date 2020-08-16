@@ -43,15 +43,31 @@ class indiv():
     else:
       return False
 
-
   def get_key(self):
     return self.key
 
-  def get_traj_image(self):
+  def get_traj(self):
+    trans = np.array(self.cart_traj)
+    return trans.T
+
+  def get_scaled_image(self, _max, _min):
+    data = self.cart_traj
+    den = (_max - _min).T
+    for d in range(len(data)):
+      for m in range(len(_min)):
+        data[d][m] -= _min[m]
+    data /= den
+    res = [ r*2 - 1 for r in data]
+
+    scaled_traj_image = self.get_traj_image(res)
+
+    return scaled_traj_image
+
+  def get_traj_image(self, data):
     ret = np.zeros((1, 100))
     for c in range(NB_STEP):
-      ret[0, c] = self.cart_traj[c][0]
-      ret[0, c + NB_STEP] = self.cart_traj[c][1]
+      ret[0, c] = data[c][0]
+      ret[0, c + NB_STEP] = data[c][1]
     return ret
 
   def get_gt(self):

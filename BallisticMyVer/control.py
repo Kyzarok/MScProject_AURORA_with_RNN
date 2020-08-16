@@ -35,7 +35,25 @@ INITIAL_NOVLETY = 0.01
 FIT_MIN = 0.001
 FIT_MAX = 0.999
 
-    
+def get_scaling_vars(population):
+    dims = population[0].get_traj().shape
+    max_vals = [ 0.0 for i in range(dims[0]) ] 
+    min_vals = [ 99999.9 for i in range(dims[0]) ]
+    for member in population:
+        this_traj = member.get_traj()
+        for row in range(len(this_traj)):
+            get_max = np.amax(this_traj[row])
+            get_min = np.amin(this_traj[row])
+            if get_max > max_vals[row]:
+                max_vals[row] = get_max
+            if get_min < min_vals[row]:
+                min_vals[row] = get_min
+
+    max_vals = np.array(max_vals)
+    min_vals = np.array(min_vals)
+    return max_vals, min_vals
+
+
 def make_batches(population):
     pop_left = len(population)
     num_of_full_batches = pop_left % BATCH_SIZE
@@ -49,13 +67,16 @@ def make_batches(population):
     return batches
 
 def train_ae(autoencoder, population, trained_this_many):
-    # Reset the optimizer
-    autoencoder.reset_optimizer_op
+    _max, _min = get_scaling_vars(population)
+
     loss_plot = []
     gpu_options = tf.GPUOptions(allow_growth=True)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
         init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
-        session.run(init_all_vars_op) 
+        session.run(init_all_vars_op)   
+
+        # Reset the optimizer
+        autoencoder.reset_optimizer_op
         autoencoder.saver.restore(session, "MY_MODEL")
 
         # Make batches
@@ -67,7 +88,7 @@ def train_ae(autoencoder, population, trained_this_many):
                 print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
             for batch in batch_list:
                 for member in batch:
-                    image = member.get_traj_image()
+                    image = member.get_scaled_image(_max, _min)
                     _, loss, _, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
                     # autoencoder.step()
             avg_loss = np.mean(loss)
@@ -153,9 +174,9 @@ def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population):
 
         pop_without_x_2 = population.copy()
         del pop_without_x_2[k_n_n[0]]
-        print(dist_from_k_n_n)
-        x_1_novelty, _, _ = dist_from_k_n_n[1]
-        x_2_novelty, _, _ = calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
+        # print(dist_from_k_n_n)
+        x_1_novelty = dist_from_k_n_n[1]
+        x_2_novelty, _ = calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
 
         # Find if exclusive epsilon dominance is met according to Cully QD Framework
         # First Condition
@@ -223,6 +244,7 @@ def plot_latent(population, trained_this_many):
     y = []
     for member in population:
         this_x, this_y = member.get_bd()[0]
+        print(this_x, this_y)
         x.append(this_x)
         y.append(this_y)
     
@@ -272,16 +294,18 @@ def AURORA_ballistic_task():
     # Create container for laten space representation
     latent_space = []
 
+    _max, _min = get_scaling_vars(pop)
+
     # Use the now trained Autoencoder to get the behavioural descriptors
     with tf.Session() as sess:
         my_ae.saver.restore(sess, "MY_MODEL")
         for member in pop:
-            image = member.get_traj_image()
+            image = member.get_scaled_image(_max, _min)
             # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
             member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
             member.set_bd(member_bd)
             latent_space.append(member_bd)
-    
+    plot_latent(pop, 1)
 
     # Randomly intialize the QD algorithm
     # Calculate starting novelty threshold
@@ -296,7 +320,7 @@ def AURORA_ballistic_task():
 
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
-            print("Current size of population " + len(pop))
+            print("Current size of population " + str(len(pop)))
             for j in range(NB_QD_ITERATIONS):
                 if j%100 == 0:
                     print("At QD iteration " + str(j) + ", we're " + str(j/NB_QD_ITERATIONS * 100) + "% of the way there!")
@@ -309,7 +333,7 @@ def AURORA_ballistic_task():
                 new_indiv = mut_eval(controller)
 
                 # 3. Get the Behavioural Descriptor for the new individual
-                image = new_indiv.get_traj_image()
+                image = new_indiv.get_scaled_image(_max, _min)
                 new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
 
                 # 4. See if the new Behavioural Descriptor is novel enough
@@ -337,10 +361,11 @@ def AURORA_ballistic_task():
 
         # 8. Assign the members of the population the new Behavioural Descriptors
         #    and refill the latent space
+        _max, _min = get_scaling_vars(pop)
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
             for member in pop:
-                image = member.get_traj_image()
+                image = member.get_scaled_image(_max, _min)
                 member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
@@ -365,7 +390,7 @@ def AURORA_ballistic_task():
                 new_pop[dominated] = member
 
         pop = new_pop
-        plot_latent(pop, j + 1)
+        plot_latent(pop, i + 2)
 
 
 
