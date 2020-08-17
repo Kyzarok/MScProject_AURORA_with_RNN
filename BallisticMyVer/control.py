@@ -19,11 +19,12 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 NUM_EPOCH = 25000
-# NUM_EPOCH = 250
+# NUM_EPOCH = 25
 BATCH_SIZE = 20000
 
-NB_RETRAIN = 5
-NB_QD_ITERATIONS = 10000
+RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
+NB_QD_ITERATIONS = 200
+NB_QD_BATCHES = 5000
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -98,21 +99,22 @@ def train_ae(autoencoder, population, trained_this_many):
         autoencoder.saver.save(session, "MY_MODEL")
 
     print("Training Complete")
+    plt.clf()
     plt.plot(loss_plot)
     plt.xlabel("Epoch")
     plt.ylabel("Reconstruction Loss")
     title = None
     if trained_this_many == 1:
-        title = "Training Loss, Autoencoder Trained " + str(trained_this_many) + " time"
+        title = "Training Loss when Autoencoder Trained " + str(trained_this_many) + " time"
     else:
-        title = "Training Loss, Autoencoder Trained " + str(trained_this_many) + " times"
+        title = "Training Loss when Autoencoder Trained " + str(trained_this_many) + " times"
     plt.title(title)
-    plt.show()
+    save_name = "myplots/Training_Loss_AE_Trained_"+str(trained_this_many)
+    plt.savefig(save_name)
     return autoencoder
 
-def prep_apply(data):
-    scaled_data = data
-    return scaled_data
+def KL_divergence():
+    return 0
 
 def calculate_novelty_threshold(latent_space):
 
@@ -166,9 +168,9 @@ def mut_eval(indiv_params):
     new_indiv.eval(new_params)
     return new_indiv
 
-def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population):
+def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novelty):
     dominated_indiv = -1
-    x_1_novelty = 0
+    x_1_novelty = init_novelty
     # If novelty threshold is greater than the nearest neighbour but less than the second nearest neighbour
     if (curr_threshold > dist_from_k_n_n[0]) and (curr_threshold < dist_from_k_n_n[1]):
 
@@ -225,9 +227,6 @@ def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
                     k_n_n[-1] = member
 
         # Sort lists so that minimum novelty is at the start
-        if len(dist_from_k_n_n) != K_NEAREST_NEIGHBOURS:
-            print("X_1_NOVELTY ERROR")
-            print(dist_from_k_n_n)
         k_n_n = [x for _,x in sorted(zip(dist_from_k_n_n, k_n_n))]
         dist_from_k_n_n.sort()
         novelty = dist_from_k_n_n[0]
@@ -235,7 +234,7 @@ def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
         dominated_indiv = -1
 
         if check_dominate:
-            dominated_indiv, novelty = does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population)
+            dominated_indiv, novelty = does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, novelty)
 
         return novelty, dominated_indiv
 
@@ -244,10 +243,9 @@ def plot_latent(population, trained_this_many):
     y = []
     for member in population:
         this_x, this_y = member.get_bd()[0]
-        print(this_x, this_y)
         x.append(this_x)
         y.append(this_y)
-    
+    plt.clf()
     plt.scatter(x, y, c='b')
     plt.xlabel("Encoded dimension 1")
     plt.ylabel("Encoded dimension 2")
@@ -257,7 +255,9 @@ def plot_latent(population, trained_this_many):
     else:
         title = "Latent Space, Autoencoder Trained " + str(trained_this_many) + " times"
     plt.title(title)
-    plt.show()
+    # plt.show()
+    save_name = "myplots/Latent_Space_AE_Trained_"+str(trained_this_many)
+    plt.savefig(save_name)
 
 def AURORA_ballistic_task():
     # Randomly generate some controllers
@@ -314,7 +314,11 @@ def AURORA_ballistic_task():
     # Main algorithm
 
     # Loop for controlling number of times Autoencoder is retrained
-    for i in range(NB_RETRAIN):
+
+    # Begin AURORA
+    # For 5000 generations, run 200 evaluations, and retrain the network a set numebr of times
+    network_activation = 0
+    for i in range(NB_QD_BATCHES):
         # Begin Quality Diversity iterations
         print("Beginning QD iterations")
 
@@ -322,8 +326,8 @@ def AURORA_ballistic_task():
             my_ae.saver.restore(sess, "MY_MODEL")
             print("Current size of population " + str(len(pop)))
             for j in range(NB_QD_ITERATIONS):
-                if j%100 == 0:
-                    print("At QD iteration " + str(j) + ", we're " + str(j/NB_QD_ITERATIONS * 100) + "% of the way there!")
+                # if j%20 == 0:
+                #     print("At QD iteration " + str(j) + ", we're " + str(j/NB_QD_ITERATIONS * 100) + "% of the way there!")
 
                 # 1. Randomly select a controller from the population
                 this_indiv = random.choice(pop)
@@ -351,50 +355,54 @@ def AURORA_ballistic_task():
                     pop[dominated] = new_indiv
         print("Finished QD iterations")
 
-        # 6. Retrain Autoencoder after a number of QD iterations
-        print("Calling Autoencoder retrain")
-        my_ae = train_ae(my_ae, pop, i+2)
-        print("Completed retraining")
+        if i == RETRAIN_ITER[network_activation]:
+            # 6. Retrain Autoencoder after a number of QD iterations
+            print("Calling Autoencoder retrain")
+            my_ae = train_ae(my_ae, pop, network_activation + 1)
+            print("Completed retraining")
 
-        # 7. Clear latent space
-        latent_space = []
+            # 7. Clear latent space
+            latent_space = []
 
-        # 8. Assign the members of the population the new Behavioural Descriptors
-        #    and refill the latent space
-        _max, _min = get_scaling_vars(pop)
-        with tf.Session() as sess:
-            my_ae.saver.restore(sess, "MY_MODEL")
+            # 8. Assign the members of the population the new Behavioural Descriptors
+            #    and refill the latent space
+            _max, _min = get_scaling_vars(pop)
+            with tf.Session() as sess:
+                my_ae.saver.restore(sess, "MY_MODEL")
+                for member in pop:
+                    image = member.get_scaled_image(_max, _min)
+                    member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                    member.set_bd(member_bd)
+                    latent_space.append(member_bd)
+
+            # 9. Calculate new novelty threshold to ensure population size less than 10000
+            threshold = calculate_novelty_threshold(latent_space)
+            print("New novelty threshold is " + str(threshold))
+
+            # 10. Update population so that only members with novel bds are allowed
+            print("Add viable members back to population")
+            latent_space = []
+            new_pop = []
             for member in pop:
-                image = member.get_scaled_image(_max, _min)
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-                member.set_bd(member_bd)
-                latent_space.append(member_bd)
-
-        # 9. Calculate new novelty threshold to ensure population size less than 10000
-        threshold = calculate_novelty_threshold(latent_space)
-        print("New novelty threshold is " + str(threshold))
-
-        # 10. Update population so that only members with novel bds are allowed
-        print("Add viable members back to population")
-        latent_space = []
-        new_pop = []
-        for member in pop:
-            this_bd = member.get_bd()
-            novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
-            if dominated == -1:                           #    If the individual did not dominate another individual
-                if novelty >= threshold:                  #    If the individual is novel
+                this_bd = member.get_bd()
+                novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
+                if dominated == -1:                           #    If the individual did not dominate another individual
+                    if novelty >= threshold:                  #    If the individual is novel
+                        member.set_novelty(novelty)
+                        new_pop.append(member)
+                else:                                         #    If the individual dominated another individual
                     member.set_novelty(novelty)
-                    new_pop.append(member)
-            else:                                         #    If the individual dominated another individual
-                member.set_novelty(novelty)
-                new_pop[dominated] = member
+                    new_pop[dominated] = member
 
-        pop = new_pop
-        plot_latent(pop, i + 2)
+            pop = new_pop
+            plot_latent(pop, network_activation + 1)
 
+            # 11. Prepare to check next retrain period
+            network_activation += 1
 
+        
 
-
+ 
 
 if __name__ == "__main__":
     import argparse
