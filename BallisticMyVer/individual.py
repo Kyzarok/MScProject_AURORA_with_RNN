@@ -94,7 +94,6 @@ class indiv():
     self._gt = self.desc_hardcoded()
 
   def simulate(self, F, theta):
-    print("BEGINNING")
     a = [F * math.cos(theta) / M, (F * math.sin(theta)-9.81) / M]
     if F * math.sin(theta) <= 9.81*3 :
       p = [0.0, 0.0]
