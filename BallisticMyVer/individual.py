@@ -23,6 +23,8 @@ class indiv():
     self._entropy = 0.0
 
     self.novelty = 0.0
+
+    self.max_point = []
   
   def set_bd(self, bd):
     self.bd = bd
@@ -35,6 +37,9 @@ class indiv():
   
   def get_novelty(self):
     return self.novelty
+
+  def get_max_point(self):
+    return self.max_point
 
   def is_dead(self):
     zero = np.zeros(2, 50)

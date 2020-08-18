@@ -19,7 +19,7 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 NUM_EPOCH = 25000
-# NUM_EPOCH = 25
+# NUM_EPOCH = 1
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
@@ -84,7 +84,10 @@ def train_ae(autoencoder, population, trained_this_many):
         batch_list = make_batches(population)
         print("Beginning Training of Autoencoder")
         loss = 0
-        for epoch in range(NUM_EPOCH):
+        epoch = 0
+        condition = True
+        while(condition):
+        # for epoch in range(NUM_EPOCH):
             if epoch % 250 == 0:
                 print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
             for batch in batch_list:
@@ -94,6 +97,13 @@ def train_ae(autoencoder, population, trained_this_many):
                     # autoencoder.step()
             avg_loss = np.mean(loss)
             loss_plot.append(avg_loss)
+            epoch += 1
+
+            if epoch >= 500:
+                
+
+            if epoch == NUM_EPOCH:
+                condition = False
 
         # Save the current autoencoder
         autoencoder.saver.save(session, "MY_MODEL")
@@ -113,8 +123,49 @@ def train_ae(autoencoder, population, trained_this_many):
     plt.savefig(save_name)
     return autoencoder
 
-def KL_divergence():
-    return 0
+def KLC(population):
+    nb_bins = 30
+    # Get the "ground truth", aka the manually defined behavioural descriptor, and the current encoder latent space
+    ground_truth_0 = []
+    ground_truth_1 = []
+    latent_space_0 = []
+    latent_space_1 = []
+    for member in population:
+        gt = member.get_gt()
+        ground_truth_0.append(gt[0])
+        ground_truth_1.append(gt[1])
+        bd = member.get_bd()[0]
+        print(bd)
+        latent_space_0.append(bd[0])
+        latent_space_1.append(bd[1])
+    # covariance_of_ground_truth = np.cov(ground_truth)
+    # A = np.linalg.cholesky(covariance_of_ground_truth)
+    # projected_bds = np.array(latent_space) @ A.T
+    
+    # Get normalized histograms of the data
+    g_norm_0, _, _ = plt.hist(ground_truth_0, bins=nb_bins, density=True)
+    print(g_norm_0)
+    g_norm_1, _, _ = plt.hist(ground_truth_1, bins=nb_bins, density=True)
+    # print(g_norm.shape)
+
+    l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
+    print(l_norm_0)
+    l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
+    print(l_norm_1)
+
+    # print(l_norm.shape)
+    D_KL_0 = 0.0
+    D_KL_1 = 0.0
+    for i in range(nb_bins):
+        if l_norm_0[i] == 0.0:
+            l_norm_0[i] = 0.000001
+        D_KL_0 += g_norm_0[i] * math.log(g_norm_0[i] / l_norm_0[i])
+        if l_norm_1[i] == 0.0:
+            l_norm_1[i] = 0.000001
+        D_KL_1 += g_norm_1[i] * math.log(g_norm_1[i] / l_norm_1[i])
+
+    D_KL = (D_KL_0 + D_KL_1) / 2
+    return D_KL
 
 def calculate_novelty_threshold(latent_space):
 
@@ -316,8 +367,10 @@ def AURORA_ballistic_task():
     # Loop for controlling number of times Autoencoder is retrained
 
     # Begin AURORA
-    # For 5000 generations, run 200 evaluations, and retrain the network a set numebr of times
     network_activation = 0
+    klc_log = []
+
+    # For 5000 generations, run 200 evaluations, and retrain the network a set numebr of times
     for i in range(NB_QD_BATCHES):
         # Begin Quality Diversity iterations
         print("Beginning QD iterations")
@@ -381,7 +434,6 @@ def AURORA_ballistic_task():
 
             # 10. Update population so that only members with novel bds are allowed
             print("Add viable members back to population")
-            latent_space = []
             new_pop = []
             for member in pop:
                 this_bd = member.get_bd()
@@ -395,10 +447,18 @@ def AURORA_ballistic_task():
                     new_pop[dominated] = member
 
             pop = new_pop
+
+            # 11. Get current Latent Space plot
             plot_latent(pop, network_activation + 1)
 
-            # 11. Prepare to check next retrain period
+            # 12. Prepare to check next retrain period
             network_activation += 1
+        
+        # 13. For each batch/generation, get the Kullback Liebler Coverage value
+        current_klc = KLC(pop)
+        klc_log.append(current_klc)
+    
+
 
         
 
