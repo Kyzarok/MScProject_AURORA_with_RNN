@@ -84,26 +84,59 @@ def train_ae(autoencoder, population, trained_this_many):
         batch_list = make_batches(population)
         print("Beginning Training of Autoencoder")
         loss = 0
-        epoch = 0
-        condition = True
-        while(condition):
-        # for epoch in range(NUM_EPOCH):
-            if epoch % 250 == 0:
-                print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
-            for batch in batch_list:
-                for member in batch:
+
+
+        for training_data, validation_data in batch_list:
+            condition = True
+            val_loss = []
+            epoch = 0
+            last_val_loss = 999999999999
+
+            # This condition controls the training session
+            while(condition):
+                
+                # Reset epoch losses
+                t_loss = 0.0
+                v_loss = 0.0
+
+                if epoch % 250 == 0:
+                    print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
+
+                # Actual training
+                for t in training_data:
+                    member = population[t]
                     image = member.get_scaled_image(_max, _min)
                     _, loss, _, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                    # autoencoder.step()
-            avg_loss = np.mean(loss)
-            loss_plot.append(avg_loss)
-            epoch += 1
+                    t_loss += np.mean(loss)
 
-            if epoch >= 500:
-                
+                loss_plot.append(t_loss)
 
-            if epoch == NUM_EPOCH:
-                condition = False
+                # Calcualte epoch validation loss
+                for v in validation_data:
+                    member = population[v]
+                    image = member.get_scaled_image(_max, _min)
+                    loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
+                    v_loss += np.mean(loss)
+
+                val_loss.append(v_loss)
+
+                if len(val_loss) >= 500:
+                    # Get the last 500 values of validation loss
+                    calc_avg_loss = val_loss[-500:]
+                    # Calculate the average
+                    calc_avg_loss = np.mean(calc_avg_loss)
+
+                    # If validation loss has increased OR if max epoch count has been reached, stop the training session
+                    if (calc_avg_loss > last_val_loss) or (epoch == NUM_EPOCH):
+                        condition = False
+                    
+                    else:
+                        # Record new value to use as previous validation loss
+                        last_val_loss = calc_avg_loss
+                        # Increase counter
+                        epoch += 1
+
+
 
         # Save the current autoencoder
         autoencoder.saver.save(session, "MY_MODEL")
