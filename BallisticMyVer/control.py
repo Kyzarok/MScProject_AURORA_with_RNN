@@ -2,12 +2,8 @@
 # Running this runs the ballistic task
 
 import numpy as np
-# import torch
 import individual
 import random
-# import my_ae
-# from tqdm.autonotebook import tqdm
-# from itertools import chain
 import math
 from original_ae import AE
 import tensorflow.compat.v1 as tf
@@ -93,17 +89,11 @@ def train_ae(autoencoder, population, when_trained):
 
         # Reset the optimizer
         autoencoder.reset_optimizer_op
-        # if(trained_this_many != 1):
-        #     autoencoder.saver.restore(session, "MY_MODEL")
-
-        # Make batches
-        # batch_list = make_batches(population)
         
         # Get training and validation datasets
         ref_dataset = split_dataset(len(population))
 
         print("Beginning Training of Autoencoder")
-        # loss = 0
 
         for training_data, validation_data in ref_dataset:
             condition = True
@@ -125,9 +115,6 @@ def train_ae(autoencoder, population, when_trained):
                     member = population[t]
                     image = member.get_scaled_image(_max, _min)
                     _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                    # print("New boi  " + str(member.get_key()) + " got the bd " + str(bd))
-                    # autoencoder.train_step
-
                     t_loss += np.mean(loss)
 
                 t_loss_record.append(t_loss)
@@ -157,7 +144,7 @@ def train_ae(autoencoder, population, when_trained):
 
                 if (epoch == NUM_EPOCH):
                         condition = False
-                # Increase counter
+                # Increase epoch counter
                 else:
                     epoch += 1
 
@@ -211,7 +198,7 @@ def KLC(population):
     e_i = 0.0
     a_i = 0.0
     for i in range(nb_bins):
-        # Case control. These histograms exist to act as pseudo probability distributions
+        # Case controlis necessary as these histograms exist to act as pseudo probability distributions
         # In histograms, a bin may have 0 values
         # In a probability distribution, there is always a minor chance something can happend
         # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
@@ -302,7 +289,6 @@ def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novel
 
         pop_without_x_2 = population.copy()
         del pop_without_x_2[k_n_n[0]]
-        # print(dist_from_k_n_n)
         x_1_novelty = dist_from_k_n_n[1]
         x_2_novelty, _ = calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
 
@@ -390,7 +376,7 @@ def plot_latent_gt(population, when_trained):
     else:
         title = "Latent Space when Autoencoder Retrained at Generation/Batch " + str(when_trained)
     plt.title(title)
-    save_name = "myplots/Latent_Space_AE_Trained_"+str(trained_this_many)
+    save_name = "myplots/Latent_Space_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
 
     plt.clf()
@@ -403,7 +389,7 @@ def plot_latent_gt(population, when_trained):
     else:
         title = "Ground Truth when Autoencoder Retrained at Generation/Batch " + str(when_trained)
     plt.title(title)
-    save_name = "myplots/Ground_Truth_AE_Trained_"+str(trained_this_many)
+    save_name = "myplots/Ground_Truth_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
 
 
@@ -428,14 +414,6 @@ def AURORA_ballistic_task():
     # Create the dimension reduction algorithm (the Autoencoder)
     my_ae = AE()
 
-    # Initialize variables
-    # gpu_options = tf.GPUOptions(allow_growth=True)
-    # with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
-    #     init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
-    #     session.run(init_all_vars_op) 
-        # tf.train.write_graph(session.graph_def, '../resources', 'graph.pb', as_text=False)
-        # save_path_init = my_ae.saver.save(session, "../resources/model_init.ckpt")
-
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
     my_ae = train_ae(my_ae, pop, 0)
 
@@ -453,24 +431,22 @@ def AURORA_ballistic_task():
             member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
             member.set_bd(member_bd)
             latent_space.append(member_bd)
+    
+    # Record current latent space
     plot_latent_gt(pop, 0)
 
-    # Randomly intialize the QD algorithm
     # Calculate starting novelty threshold
     threshold = INITIAL_NOVLETY
 
-    # Main algorithm
-
-    # Loop for controlling number of times Autoencoder is retrained
-
-    # Begin AURORA
+    # These are needed for the main algorithm
     network_activation = 0
     klc_log = []
     just_finished_training = True
-
-    # For 5000 generations, run 200 evaluations, and retrain the network a set numebr of times
+    
+    # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
     for i in range(NB_QD_BATCHES):
         _max, _min = get_scaling_vars(pop)
+
         # Begin Quality Diversity iterations
         if just_finished_training:
             print("Beginning QD iterations")
@@ -479,8 +455,6 @@ def AURORA_ballistic_task():
             my_ae.saver.restore(sess, "MY_MODEL")
             print("Current size of population " + str(len(pop)))
             for j in range(NB_QD_ITERATIONS):
-                # if j%20 == 0:
-                #     print("At QD iteration " + str(j) + ", we're " + str(j/NB_QD_ITERATIONS * 100) + "% of the way there!")
 
                 # 1. Randomly select a controller from the population
                 this_indiv = random.choice(pop)
@@ -492,7 +466,6 @@ def AURORA_ballistic_task():
                 # 3. Get the Behavioural Descriptor for the new individual
                 image = new_indiv.get_scaled_image(_max, _min)
                 new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-                # print("New boi  " + str(new_indiv.get_key()) + " got the bd " + str(new_bd))
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
@@ -513,6 +486,7 @@ def AURORA_ballistic_task():
         if i == RETRAIN_ITER[network_activation]:
 
             print("Finished QD iterations")
+
             # 6. Retrain Autoencoder after a number of QD iterations
             print("Training Autoencoder, this is training session: " + str(network_activation + 2))
             my_ae = train_ae(my_ae, pop, i)
@@ -586,49 +560,3 @@ if __name__ == "__main__":
     if args.control == "ballistic":
         AURORA_ballistic_task()
 
-
-
-
-
-# class MyDataset(torch.utils.data.Dataset):
-#     def __init__(self, pop_data):
-#         self.data = torch.zeros(len(pop_data), 100)
-#         # Create image dataset from trajectory data
-#         print("Constructing Dataset")
-#         index = 0
-#         for member in pop_data:
-#             tmp = torch.zeros(100, 1)
-#             traj = member.get_traj()
-#             for t in range(50):
-#                 tmp[2*t] = traj[t][0]
-#                 tmp[2*t+1] = traj[t][1]
-#             self.data[index] = tmp.t()
-#             index += 1
-#         print("Complete")
-#     def __len__(self):
-#         return len(self.data)
-
-#     def __getitem__(self, index):
-#         return self.data[index]
-
-# def train_ae(encoder, decoder, population):
-#     # Create dataset for loading
-#     train_data = MyDataset(population)
-#     train_loader = torch.utils.data.DataLoader(train_data, batch_size=BATCH_SIZE)
-#     optimizer = torch.optim.Adagrad(chain(encoder.parameters(), decoder.parameters()), lr=0.1, lr_decay=0.9)
-#     print("Beginning Training of Autoencoder")
-#     for epoch in range(NUM_EPOCH):
-#         if epoch % 1000 == 0:
-#             print("At epoch " + str(epoch))
-#         train_loader = tqdm(train_loader)
-#         for data in (train_loader):
-#             optimizer.zero_grad()
-#             z = encoder(data)
-#             outputs = decoder(z)
-#             diffs = (data - outputs)**2
-#             loss = sum(diffs)/len(diffs)
-
-#             loss.backward()
-#             optimizer.step()
-#     print("Training Complete")
-#     return encoder, decoder
