@@ -81,7 +81,7 @@ def split_dataset(pop_size):
         t_v_list.append([training_indices, val_indices])
     return t_v_list
 
-def train_ae(autoencoder, population, trained_this_many):
+def train_ae(autoencoder, population, when_trained):
     _max, _min = get_scaling_vars(population)
 
     t_loss_record = []
@@ -174,12 +174,12 @@ def train_ae(autoencoder, population, trained_this_many):
     plt.ylabel("Reconstruction Loss")
     plt.legend()
     title = None
-    if trained_this_many == 1:
-        title = "Loss when Autoencoder Trained " + str(trained_this_many) + " time"
+    if when_trained == 0:
+        title = "Loss when Autoencoder Initially Trained"
     else:
-        title = "Loss when Autoencoder Trained " + str(trained_this_many) + " times"
+        title = "Loss when Autoencoder Retrained at Generation/Batch " + str(when_trained)
     plt.title(title)
-    save_name = "myplots/Loss_AE_Trained_"+str(trained_this_many)
+    save_name = "myplots/Loss_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
     return autoencoder
 
@@ -364,7 +364,7 @@ def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
 
         return novelty, dominated_indiv
 
-def plot_latent_gt(population, trained_this_many):
+def plot_latent_gt(population, when_trained):
     l_x = []
     l_y = []
     g_x = []
@@ -385,10 +385,10 @@ def plot_latent_gt(population, trained_this_many):
     plt.xlabel("Encoded dimension 1")
     plt.ylabel("Encoded dimension 2")
     title = None
-    if trained_this_many == 1:
-        title = "Latent Space when Autoencoder Trained " + str(trained_this_many) + " time"
+    if when_trained == 0:
+        title = "Latent Space when Autoencoder Initially Trained"
     else:
-        title = "Latent Space when Autoencoder Trained " + str(trained_this_many) + " times"
+        title = "Latent Space when Autoencoder Retrained at Generation/Batch " + str(when_trained)
     plt.title(title)
     save_name = "myplots/Latent_Space_AE_Trained_"+str(trained_this_many)
     plt.savefig(save_name)
@@ -398,10 +398,10 @@ def plot_latent_gt(population, trained_this_many):
     plt.xlabel("X position at Hax Height")
     plt.ylabel("Max Height Achieved")
     title = None
-    if trained_this_many == 1:
-        title = "Ground Truth when Autoencoder Trained " + str(trained_this_many) + " time"
+    if when_trained == 0:
+        title = "Ground Truth when Autoencoder Initially Trained"
     else:
-        title = "Ground Truth when Autoencoder Trained " + str(trained_this_many) + " times"
+        title = "Ground Truth when Autoencoder Retrained at Generation/Batch " + str(when_trained)
     plt.title(title)
     save_name = "myplots/Ground_Truth_AE_Trained_"+str(trained_this_many)
     plt.savefig(save_name)
@@ -437,7 +437,7 @@ def AURORA_ballistic_task():
         # save_path_init = my_ae.saver.save(session, "../resources/model_init.ckpt")
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae = train_ae(my_ae, pop, 1)
+    my_ae = train_ae(my_ae, pop, 0)
 
     # Create container for laten space representation
     latent_space = []
@@ -453,7 +453,7 @@ def AURORA_ballistic_task():
             member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
             member.set_bd(member_bd)
             latent_space.append(member_bd)
-    plot_latent_gt(pop, 1)
+    plot_latent_gt(pop, 0)
 
     # Randomly intialize the QD algorithm
     # Calculate starting novelty threshold
@@ -466,12 +466,14 @@ def AURORA_ballistic_task():
     # Begin AURORA
     network_activation = 0
     klc_log = []
+    just_finished_training = True
 
     # For 5000 generations, run 200 evaluations, and retrain the network a set numebr of times
     for i in range(NB_QD_BATCHES):
         _max, _min = get_scaling_vars(pop)
         # Begin Quality Diversity iterations
-        print("Beginning QD iterations")
+        if just_finished_training:
+            print("Beginning QD iterations")
 
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
@@ -505,12 +507,15 @@ def AURORA_ballistic_task():
                     new_indiv.set_bd(new_bd)
                     new_indiv.set_novelty(novelty)
                     pop[dominated] = new_indiv
-        print("Finished QD iterations")
+
+        just_finished_training = False
 
         if i == RETRAIN_ITER[network_activation]:
+
+            print("Finished QD iterations")
             # 6. Retrain Autoencoder after a number of QD iterations
-            print("Calling Autoencoder retrain")
-            my_ae = train_ae(my_ae, pop, network_activation + 2)
+            print("Training Autoencoder, this is training session: " + str(network_activation + 2))
+            my_ae = train_ae(my_ae, pop, i)
             print("Completed retraining")
 
             # 7. Clear latent space
@@ -548,10 +553,11 @@ def AURORA_ballistic_task():
             pop = new_pop
 
             # 11. Get current Latent Space and Ground Truth plots
-            plot_latent_gt(pop, network_activation + 2)
+            plot_latent_gt(pop, i)
 
             # 12. Prepare to check next retrain period
             network_activation += 1
+            just_finished_training = True
         
         # 13. For each batch/generation, get the Kullback Liebler Coverage value
         current_klc = KLC(pop)
