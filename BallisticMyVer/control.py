@@ -19,7 +19,7 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 NUM_EPOCH = 25000
-# NUM_EPOCH = 1
+# NUM_EPOCH = 250
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
@@ -67,10 +67,25 @@ def make_batches(population):
         pop_left -= BATCH_SIZE
     return batches
 
+def split_dataset(pop_size):
+    val_size = int(pop_size/4)
+    train_size = pop_size - val_size
+    indices = [ i for i in range(pop_size)]
+
+    t_v_list = []
+    for j in range(5):
+        this_list = indices.copy()
+        random.shuffle(this_list)
+        training_indices = this_list[0 : train_size]
+        val_indices = this_list[train_size : train_size + val_size]
+        t_v_list.append([training_indices, val_indices])
+    return t_v_list
+
 def train_ae(autoencoder, population, trained_this_many):
     _max, _min = get_scaling_vars(population)
 
-    loss_plot = []
+    t_loss_record = []
+    v_loss_record = []
     gpu_options = tf.GPUOptions(allow_growth=True)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
         init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
@@ -78,17 +93,20 @@ def train_ae(autoencoder, population, trained_this_many):
 
         # Reset the optimizer
         autoencoder.reset_optimizer_op
-        autoencoder.saver.restore(session, "MY_MODEL")
+        # if(trained_this_many != 1):
+        #     autoencoder.saver.restore(session, "MY_MODEL")
 
         # Make batches
-        batch_list = make_batches(population)
+        # batch_list = make_batches(population)
+        
+        # Get training and validation datasets
+        ref_dataset = split_dataset(len(population))
+
         print("Beginning Training of Autoencoder")
-        loss = 0
+        # loss = 0
 
-
-        for training_data, validation_data in batch_list:
+        for training_data, validation_data in ref_dataset:
             condition = True
-            val_loss = []
             epoch = 0
             last_val_loss = 999999999999
 
@@ -106,10 +124,13 @@ def train_ae(autoencoder, population, trained_this_many):
                 for t in training_data:
                     member = population[t]
                     image = member.get_scaled_image(_max, _min)
-                    _, loss, _, _ = session.run((autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                    _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                    # print("New boi  " + str(member.get_key()) + " got the bd " + str(bd))
+                    # autoencoder.train_step
+
                     t_loss += np.mean(loss)
 
-                loss_plot.append(t_loss)
+                t_loss_record.append(t_loss)
 
                 # Calcualte epoch validation loss
                 for v in validation_data:
@@ -118,23 +139,27 @@ def train_ae(autoencoder, population, trained_this_many):
                     loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
                     v_loss += np.mean(loss)
 
-                val_loss.append(v_loss)
+                v_loss_record.append(v_loss)
 
-                if len(val_loss) >= 500:
+                if len(v_loss_record) >= 500:
                     # Get the last 500 values of validation loss
-                    calc_avg_loss = val_loss[-500:]
+                    calc_avg_loss = v_loss_record[-500:]
                     # Calculate the average
                     calc_avg_loss = np.mean(calc_avg_loss)
 
                     # If validation loss has increased OR if max epoch count has been reached, stop the training session
-                    if (calc_avg_loss > last_val_loss) or (epoch == NUM_EPOCH):
+                    if (calc_avg_loss > last_val_loss):
                         condition = False
                     
                     else:
                         # Record new value to use as previous validation loss
                         last_val_loss = calc_avg_loss
-                        # Increase counter
-                        epoch += 1
+
+                if (epoch == NUM_EPOCH):
+                        condition = False
+                # Increase counter
+                else:
+                    epoch += 1
 
 
 
@@ -143,21 +168,24 @@ def train_ae(autoencoder, population, trained_this_many):
 
     print("Training Complete")
     plt.clf()
-    plt.plot(loss_plot)
+    plt.plot(t_loss_record, label="Training Loss")
+    plt.plot(v_loss_record, label="Validation Loss")
     plt.xlabel("Epoch")
     plt.ylabel("Reconstruction Loss")
+    plt.legend()
     title = None
     if trained_this_many == 1:
-        title = "Training Loss when Autoencoder Trained " + str(trained_this_many) + " time"
+        title = "Loss when Autoencoder Trained " + str(trained_this_many) + " time"
     else:
-        title = "Training Loss when Autoencoder Trained " + str(trained_this_many) + " times"
+        title = "Loss when Autoencoder Trained " + str(trained_this_many) + " times"
     plt.title(title)
-    save_name = "myplots/Training_Loss_AE_Trained_"+str(trained_this_many)
+    save_name = "myplots/Loss_AE_Trained_"+str(trained_this_many)
     plt.savefig(save_name)
     return autoencoder
 
 def KLC(population):
     nb_bins = 30
+
     # Get the "ground truth", aka the manually defined behavioural descriptor, and the current encoder latent space
     ground_truth_0 = []
     ground_truth_1 = []
@@ -168,34 +196,48 @@ def KLC(population):
         ground_truth_0.append(gt[0])
         ground_truth_1.append(gt[1])
         bd = member.get_bd()[0]
-        print(bd)
         latent_space_0.append(bd[0])
         latent_space_1.append(bd[1])
-    # covariance_of_ground_truth = np.cov(ground_truth)
-    # A = np.linalg.cholesky(covariance_of_ground_truth)
-    # projected_bds = np.array(latent_space) @ A.T
-    
+
     # Get normalized histograms of the data
     g_norm_0, _, _ = plt.hist(ground_truth_0, bins=nb_bins, density=True)
-    print(g_norm_0)
     g_norm_1, _, _ = plt.hist(ground_truth_1, bins=nb_bins, density=True)
-    # print(g_norm.shape)
 
     l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
-    print(l_norm_0)
     l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
-    print(l_norm_1)
 
-    # print(l_norm.shape)
     D_KL_0 = 0.0
     D_KL_1 = 0.0
+    e_i = 0.0
+    a_i = 0.0
     for i in range(nb_bins):
+        # Case control. These histograms exist to act as pseudo probability distributions
+        # In histograms, a bin may have 0 values
+        # In a probability distribution, there is always a minor chance something can happend
+        # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
+
+        if g_norm_0[i] == 0.0:
+            e_i = 0.00000001
+        else:
+            e_i = g_norm_0[i]
+
         if l_norm_0[i] == 0.0:
-            l_norm_0[i] = 0.000001
-        D_KL_0 += g_norm_0[i] * math.log(g_norm_0[i] / l_norm_0[i])
+            a_i = 0.00000001
+        else:
+            a_i = l_norm_0[i]
+        D_KL_0 += e_i * math.log(e_i / a_i)
+
+
+        if g_norm_1[i] == 0.0:
+            e_i = 0.00000001
+        else:
+            e_i = g_norm_1[i]
+
         if l_norm_1[i] == 0.0:
-            l_norm_1[i] = 0.000001
-        D_KL_1 += g_norm_1[i] * math.log(g_norm_1[i] / l_norm_1[i])
+            a_i = 0.00000001
+        else:
+            a_i = l_norm_1[i]
+        D_KL_1 += e_i * math.log(e_i / a_i)
 
     D_KL = (D_KL_0 + D_KL_1) / 2
     return D_KL
@@ -335,12 +377,33 @@ def plot_latent(population, trained_this_many):
     plt.ylabel("Encoded dimension 2")
     title = None
     if trained_this_many == 1:
-        title = "Latent Space, Autoencoder Trained " + str(trained_this_many) + " time"
+        title = "Latent Space when Autoencoder Trained " + str(trained_this_many) + " time"
     else:
-        title = "Latent Space, Autoencoder Trained " + str(trained_this_many) + " times"
+        title = "Latent Space when Autoencoder Trained " + str(trained_this_many) + " times"
     plt.title(title)
     # plt.show()
     save_name = "myplots/Latent_Space_AE_Trained_"+str(trained_this_many)
+    plt.savefig(save_name)
+
+def plot_gt(population, trained_this_many):
+    x = []
+    y = []
+    for member in population:
+        this_x, this_y = member.get_gt()
+        x.append(this_x)
+        y.append(this_y)
+    plt.clf()
+    plt.scatter(x, y, c='b')
+    plt.xlabel("X position at Hax Height")
+    plt.ylabel("Max Height Achieved")
+    title = None
+    if trained_this_many == 1:
+        title = "Ground Truth when Autoencoder Trained " + str(trained_this_many) + " time"
+    else:
+        title = "Ground Truth when Autoencoder Trained " + str(trained_this_many) + " times"
+    plt.title(title)
+    # plt.show()
+    save_name = "myplots/Ground_Truth_AE_Trained_"+str(trained_this_many)
     plt.savefig(save_name)
 
 def AURORA_ballistic_task():
@@ -405,6 +468,7 @@ def AURORA_ballistic_task():
 
     # For 5000 generations, run 200 evaluations, and retrain the network a set numebr of times
     for i in range(NB_QD_BATCHES):
+        _max, _min = get_scaling_vars(pop)
         # Begin Quality Diversity iterations
         print("Beginning QD iterations")
 
@@ -425,6 +489,7 @@ def AURORA_ballistic_task():
                 # 3. Get the Behavioural Descriptor for the new individual
                 image = new_indiv.get_scaled_image(_max, _min)
                 new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                # print("New boi  " + str(new_indiv.get_key()) + " got the bd " + str(new_bd))
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
@@ -444,7 +509,7 @@ def AURORA_ballistic_task():
         if i == RETRAIN_ITER[network_activation]:
             # 6. Retrain Autoencoder after a number of QD iterations
             print("Calling Autoencoder retrain")
-            my_ae = train_ae(my_ae, pop, network_activation + 1)
+            my_ae = train_ae(my_ae, pop, network_activation + 2)
             print("Completed retraining")
 
             # 7. Clear latent space
@@ -481,8 +546,9 @@ def AURORA_ballistic_task():
 
             pop = new_pop
 
-            # 11. Get current Latent Space plot
-            plot_latent(pop, network_activation + 1)
+            # 11. Get current Latent Space and Ground Truth plots
+            plot_latent(pop, network_activation + 2)
+            plot_gt(pop, network_activation + 2)
 
             # 12. Prepare to check next retrain period
             network_activation += 1
@@ -490,6 +556,15 @@ def AURORA_ballistic_task():
         # 13. For each batch/generation, get the Kullback Liebler Coverage value
         current_klc = KLC(pop)
         klc_log.append(current_klc)
+
+    plt.clf()
+    plt.plot(klc_log, label="Training Loss")
+    plt.xlabel("Generation")
+    plt.ylabel("Kullback-LieblerDivergence")
+    title = "Kullback-Libler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.title(title)
+    save_name = "myplots/KLC"
+    plt.savefig(save_name)
     
 
 
