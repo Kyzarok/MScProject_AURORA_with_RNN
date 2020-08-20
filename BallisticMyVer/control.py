@@ -19,7 +19,7 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 NUM_EPOCH = 25000
-# NUM_EPOCH = 250
+# NUM_EPOCH = 25
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
@@ -364,15 +364,24 @@ def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
 
         return novelty, dominated_indiv
 
-def plot_latent(population, trained_this_many):
-    x = []
-    y = []
+def plot_latent_gt(population, trained_this_many):
+    l_x = []
+    l_y = []
+    g_x = []
+    g_y = []
+
     for member in population:
         this_x, this_y = member.get_bd()[0]
-        x.append(this_x)
-        y.append(this_y)
+        l_x.append(this_x)
+        l_y.append(this_y)
+        this_x, this_y = member.get_gt()
+        g_x.append(this_x)
+        g_y.append(this_y)
+
+    t = np.arange(len(population))
+
     plt.clf()
-    plt.scatter(x, y, c='b')
+    plt.scatter(l_x, l_y, c=t, cmap="rainbow")
     plt.xlabel("Encoded dimension 1")
     plt.ylabel("Encoded dimension 2")
     title = None
@@ -381,19 +390,11 @@ def plot_latent(population, trained_this_many):
     else:
         title = "Latent Space when Autoencoder Trained " + str(trained_this_many) + " times"
     plt.title(title)
-    # plt.show()
     save_name = "myplots/Latent_Space_AE_Trained_"+str(trained_this_many)
     plt.savefig(save_name)
 
-def plot_gt(population, trained_this_many):
-    x = []
-    y = []
-    for member in population:
-        this_x, this_y = member.get_gt()
-        x.append(this_x)
-        y.append(this_y)
     plt.clf()
-    plt.scatter(x, y, c='b')
+    plt.scatter(g_x, g_y, c=t, cmap="rainbow")
     plt.xlabel("X position at Hax Height")
     plt.ylabel("Max Height Achieved")
     title = None
@@ -402,9 +403,9 @@ def plot_gt(population, trained_this_many):
     else:
         title = "Ground Truth when Autoencoder Trained " + str(trained_this_many) + " times"
     plt.title(title)
-    # plt.show()
     save_name = "myplots/Ground_Truth_AE_Trained_"+str(trained_this_many)
     plt.savefig(save_name)
+
 
 def AURORA_ballistic_task():
     # Randomly generate some controllers
@@ -452,7 +453,7 @@ def AURORA_ballistic_task():
             member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
             member.set_bd(member_bd)
             latent_space.append(member_bd)
-    plot_latent(pop, 1)
+    plot_latent_gt(pop, 1)
 
     # Randomly intialize the QD algorithm
     # Calculate starting novelty threshold
@@ -547,8 +548,7 @@ def AURORA_ballistic_task():
             pop = new_pop
 
             # 11. Get current Latent Space and Ground Truth plots
-            plot_latent(pop, network_activation + 2)
-            plot_gt(pop, network_activation + 2)
+            plot_latent_gt(pop, network_activation + 2)
 
             # 12. Prepare to check next retrain period
             network_activation += 1
