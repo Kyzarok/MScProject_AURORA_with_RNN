@@ -85,7 +85,12 @@ def train_ae(autoencoder, population, when_trained):
     gpu_options = tf.GPUOptions(allow_growth=True)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options,log_device_placement=False)) as session:
         init_all_vars_op = tf.variables_initializer(tf.global_variables(), name='init_all_vars_op')
-        session.run(init_all_vars_op)   
+        session.run(init_all_vars_op)
+        if when_trained != 0:
+            print("Loading model for retraining")
+            autoencoder.saver.restore(session, "MY_MODEL")
+        else:
+            print("Training Autoencoder, this is training session: 1/" + str(len(RETRAIN_ITER) + 1))
 
         # Reset the optimizer
         autoencoder.reset_optimizer_op
@@ -366,6 +371,17 @@ def plot_latent_gt(population, when_trained):
 
     t = np.arange(len(population))
 
+    euclidean_from_zero_gt = []
+    for i in range(len(g_x)):
+        distance = g_x[i]**2 + g_y[i]**2
+        euclidean_from_zero_gt.append(distance)
+    
+
+    g_x = [x for _,x in sorted(zip(euclidean_from_zero_gt, g_x))]
+    g_y = [y for _,y in sorted(zip(euclidean_from_zero_gt, g_y))]
+    l_x = [x for _,x in sorted(zip(euclidean_from_zero_gt, l_x))]
+    l_y = [y for _,y in sorted(zip(euclidean_from_zero_gt, l_y))]
+
     plt.clf()
     plt.scatter(l_x, l_y, c=t, cmap="rainbow")
     plt.xlabel("Encoded dimension 1")
@@ -412,6 +428,7 @@ def AURORA_ballistic_task():
     print("Complete")
 
     # Create the dimension reduction algorithm (the Autoencoder)
+    print("Creating network, printing autoencoder layers")
     my_ae = AE()
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
@@ -444,16 +461,16 @@ def AURORA_ballistic_task():
     just_finished_training = True
     
     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
-    for i in range(NB_QD_BATCHES):
+    for generation in range(NB_QD_BATCHES):
         _max, _min = get_scaling_vars(pop)
 
         # Begin Quality Diversity iterations
         if just_finished_training:
-            print("Beginning QD iterations")
+            print("Beginning QD iterations, next Autoencoder retraining at generation " + str(RETRAIN_ITER[network_activation]))
 
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
-            print("Current size of population " + str(len(pop)))
+            print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
             for j in range(NB_QD_ITERATIONS):
 
                 # 1. Randomly select a controller from the population
@@ -483,56 +500,58 @@ def AURORA_ballistic_task():
 
         just_finished_training = False
 
-        if i == RETRAIN_ITER[network_activation]:
+        # Check if this generation is before the last retraining session
+        if generation < RETRAIN_ITER[-1]:
+            if generation == RETRAIN_ITER[network_activation]:
 
-            print("Finished QD iterations")
+                print("Finished QD iterations")
 
-            # 6. Retrain Autoencoder after a number of QD iterations
-            print("Training Autoencoder, this is training session: " + str(network_activation + 2))
-            my_ae = train_ae(my_ae, pop, i)
-            print("Completed retraining")
+                # 6. Retrain Autoencoder after a number of QD iterations
+                print("Training Autoencoder, this is training session: " + str(network_activation + 2) + "/" + str(len(RETRAIN_ITER) + 1))
+                my_ae = train_ae(my_ae, pop, generation)
+                print("Completed retraining")
 
-            # 7. Clear latent space
-            latent_space = []
+                # 7. Clear latent space
+                latent_space = []
 
-            # 8. Assign the members of the population the new Behavioural Descriptors
-            #    and refill the latent space
-            _max, _min = get_scaling_vars(pop)
-            with tf.Session() as sess:
-                my_ae.saver.restore(sess, "MY_MODEL")
+                # 8. Assign the members of the population the new Behavioural Descriptors
+                #    and refill the latent space
+                _max, _min = get_scaling_vars(pop)
+                with tf.Session() as sess:
+                    my_ae.saver.restore(sess, "MY_MODEL")
+                    for member in pop:
+                        image = member.get_scaled_image(_max, _min)
+                        member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                        member.set_bd(member_bd)
+                        latent_space.append(member_bd)
+
+                # 9. Calculate new novelty threshold to ensure population size less than 10000
+                threshold = calculate_novelty_threshold(latent_space)
+                print("New novelty threshold is " + str(threshold))
+
+                # 10. Update population so that only members with novel bds are allowed
+                print("Add viable members back to population")
+                new_pop = []
                 for member in pop:
-                    image = member.get_scaled_image(_max, _min)
-                    member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-                    member.set_bd(member_bd)
-                    latent_space.append(member_bd)
-
-            # 9. Calculate new novelty threshold to ensure population size less than 10000
-            threshold = calculate_novelty_threshold(latent_space)
-            print("New novelty threshold is " + str(threshold))
-
-            # 10. Update population so that only members with novel bds are allowed
-            print("Add viable members back to population")
-            new_pop = []
-            for member in pop:
-                this_bd = member.get_bd()
-                novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
-                if dominated == -1:                           #    If the individual did not dominate another individual
-                    if novelty >= threshold:                  #    If the individual is novel
+                    this_bd = member.get_bd()
+                    novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
+                    if dominated == -1:                           #    If the individual did not dominate another individual
+                        if novelty >= threshold:                  #    If the individual is novel
+                            member.set_novelty(novelty)
+                            new_pop.append(member)
+                    else:                                         #    If the individual dominated another individual
                         member.set_novelty(novelty)
-                        new_pop.append(member)
-                else:                                         #    If the individual dominated another individual
-                    member.set_novelty(novelty)
-                    new_pop[dominated] = member
+                        new_pop[dominated] = member
 
-            pop = new_pop
+                pop = new_pop
 
-            # 11. Get current Latent Space and Ground Truth plots
-            plot_latent_gt(pop, i)
+                # 11. Get current Latent Space and Ground Truth plots
+                plot_latent_gt(pop, generation)
 
-            # 12. Prepare to check next retrain period
-            network_activation += 1
-            just_finished_training = True
-        
+                # 12. Prepare to check next retrain period
+                network_activation += 1
+                just_finished_training = True
+            
         # 13. For each batch/generation, get the Kullback Liebler Coverage value
         current_klc = KLC(pop)
         klc_log.append(current_klc)
