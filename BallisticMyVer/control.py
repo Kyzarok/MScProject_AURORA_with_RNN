@@ -32,6 +32,8 @@ INITIAL_NOVLETY = 0.01
 FIT_MIN = 0.001
 FIT_MAX = 0.999
 
+CURIOSITY_OFFSET = 0.1
+
 def get_scaling_vars(population):
     dims = population[0].get_traj().shape
     max_vals = [ 0.0 for i in range(dims[0]) ] 
@@ -397,7 +399,7 @@ def plot_latent_gt(population, when_trained):
 
     plt.clf()
     plt.scatter(g_x, g_y, c=t, cmap="rainbow")
-    plt.xlabel("X position at Hax Height")
+    plt.xlabel("X position at Max Height")
     plt.ylabel("Max Height Achieved")
     title = None
     if when_trained == 0:
@@ -407,6 +409,27 @@ def plot_latent_gt(population, when_trained):
     plt.title(title)
     save_name = "myplots/Ground_Truth_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
+
+# Function to make the curiosity proportionate roulette wheel
+def make_wheel(population):
+    literal_roulette_curiosities = []
+    min_cur = 999999999.9
+    for member in population:                  
+        cur = member.get_curiosity()
+        literal_roulette_curiosities.append(cur)
+        if cur < min_cur:
+            min_cur = cur
+    if min_cur < 0:
+        min_cur = -1 * min_cur
+
+    # Shift all curiosity values by the minimum curiosity in the population
+    # Curiosity offset is necessary otherwise at initialisation nothing will work AND no new member of the population will be selected
+    offset_roulette_curiosities = [ cur + min_cur + CURIOSITY_OFFSET for cur in literal_roulette_curiosities ]
+
+    # Calculate proportionate wheel by dividing wheel by sum
+    roulette_sum = sum(offset_roulette_curiosities)
+    roulette_wheel = [ cur / roulette_sum for cur in offset_roulette_curiosities]
+    return roulette_wheel
 
 
 def AURORA_ballistic_task():
@@ -459,22 +482,33 @@ def AURORA_ballistic_task():
     network_activation = 0
     klc_log = []
     just_finished_training = True
+    roulette_wheel = []
     
     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
     for generation in range(NB_QD_BATCHES):
         _max, _min = get_scaling_vars(pop)
 
-        # Begin Quality Diversity iterations
         if just_finished_training:
             print("Beginning QD iterations, next Autoencoder retraining at generation " + str(RETRAIN_ITER[network_activation]))
+            print("Reinitialising curiosity proportionate roulette wheel")
+            roulette_wheel = make_wheel(pop)
 
+        # Begin Quality Diversity iterations
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
             print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+
             for j in range(NB_QD_ITERATIONS):
 
-                # 1. Randomly select a controller from the population
-                this_indiv = random.choice(pop)
+                # 1. Select controller from population using curiosity proportionate selection
+                selector = random.uniform(0, 1)
+                index = 0
+                cumulative = roulette_wheel[index]
+                while(selector <= cumulative):
+                    index += 1
+                    cumulative += roulette_wheel[index]
+
+                this_indiv = pop[index]
                 controller = this_indiv.get_key()
 
                 # 2. Mutate and evaluate the chosen controller
@@ -493,10 +527,21 @@ def AURORA_ballistic_task():
                         new_indiv.set_bd(new_bd)
                         new_indiv.set_novelty(novelty)
                         pop.append(new_indiv)
+
+                        pop[index].increase_curiosity()
+                        roulette_wheel = make_wheel(pop)
+
+                    else:                                     #    If the individual is NOT novel
+                        pop[index].decrease_curiosity()
+                        roulette_wheel = make_wheel(pop)
                 else:                                         #    If the individual dominated another individual
                     new_indiv.set_bd(new_bd)
                     new_indiv.set_novelty(novelty)
                     pop[dominated] = new_indiv
+
+                    pop[index].increase_curiosity()
+                    roulette_wheel = make_wheel(pop)
+
 
         just_finished_training = False
 
@@ -557,10 +602,10 @@ def AURORA_ballistic_task():
         klc_log.append(current_klc)
 
     plt.clf()
-    plt.plot(klc_log, label="Training Loss")
+    plt.plot(klc_log, label="KLC value per generation")
     plt.xlabel("Generation")
-    plt.ylabel("Kullback-LieblerDivergence")
-    title = "Kullback-Libler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.ylabel("Kullback-Liebler Divergence")
+    title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)

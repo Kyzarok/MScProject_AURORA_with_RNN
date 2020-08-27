@@ -25,6 +25,8 @@ class indiv():
     self.novelty = 0.0
 
     self.max_point = []
+
+    self.curiosity_score = 0.0
   
   def set_bd(self, bd):
     self.bd = bd
@@ -40,6 +42,15 @@ class indiv():
 
   def get_max_point(self):
     return self.max_point
+
+  def get_curiosity(self):
+    return self.curiosity_score
+
+  def increase_curiosity(self):
+    self.curiosity_score += 1.0
+
+  def decrease_curiosity(self):
+    self.curiosity_score -= 0.5
 
   def is_dead(self):
     zero = np.zeros(2, 50)
