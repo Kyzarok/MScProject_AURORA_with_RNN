@@ -9,7 +9,7 @@ from tensorflow.python.ops import math_ops
 
 from original_my_nn_lib import Convolution2D, MaxPooling2D, Conv2Dtranspose
 from original_my_nn_lib import FullConnected, ReadOutLayer
-from original_my_nn_lib import LSTM
+from original_my_nn_lib import LSTM_layer
 
 
 class AE(object):
@@ -20,6 +20,7 @@ class AE(object):
         self.latent_dim = 2
         self.global_step = tf.placeholder(tf.int32, shape=(), name="step_id")
         self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
+
 
         self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
         self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
@@ -45,10 +46,15 @@ class AE(object):
     #     self.optimizer.apply_gradients(zip(gradients, variables))
 
     def create_net(self, add_rnn):
-        self.layers=[self.x_image]
-        if add_rnn == True:
-            LSTM_layer = LSTM(self.layers[-1], self.layers[-1].get_shape().as_list()[1]).output()
-            self.layers.append(LSTM_layer)
+        if add_rnn == False:
+            self.layers=[self.x_image]
+
+        else:
+            LSTM_out = LSTM_layer(self.x)
+            self.layers = [LSTM_out]
+            self.rnn_output_image = tf.reshape(self.layers[-1], [-1, 2, self.traj_length, 1])
+            self.layers.append(self.rnn_output_image)
+
         with tf.variable_scope('encoder') as vs:
             self.create_encoder_conv([2])
             self.create_encoder_fc([5])

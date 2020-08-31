@@ -247,62 +247,111 @@ class Conv2Dtranspose(object):
         return self.output
 
 
-# LSTM Layer
-class LSTM(object):
-    '''
-      constructor's args:
-
-    '''
-    def __init__(self, input, input_siz):
-        self.input = input
-        self.cell = tf.nn.rnn_cell.LSTMCell(num_units = 2)
-        print('Current weights')
-        print(self.cell.get_weights())
-        wshape = [2, 50]
-
-        w_cv = tf.Variable(xavier_init(wshape), trainable=True)
-        
-        self.w = w_cv
-        
-    def output(self):
-        
-        self.cell.set_weights(self.w)
-        linout = self.cell.apply(self.input)
-        shapeOut = [None, 2, 50, 1]
-        linout.set_shape(shapeOut)
-        print("LSTM: ")
-        print(shapeOut)                 
-        self.out = linout
-        
-        return self.out
-
 def LSTM_layer(x):
+    #10^-3
+    key = 0.001
+    mult = int(1/key)
+    n_input = 50
 
-    vocab_size = len(dictionary)
-    n_input = 3
+    # dictionary = dict()
+    # print("Begin Creating Dictionaries")
+    # x_val = tf.constant(0, dtype = x.dtype)
+    # total = tf.constant(0, dtype = x.dtype)
+
+    # # x = tf.constant([5, 4, 6, 7])
+    # # y = tf.constant([5, 2, 5, 10])
+    # # print(tf.math.greater_equal(x, y))
+    
+
+    # # print(tf.math.greater_equal(x_val, total))
+    # for i in range(mult + 1):
+    #     y_val = tf.constant(0, dtype = x.dtype)
+    #     dictionary[x_val] = dict()
+    #     for j in range(mult + 1):
+    #         dictionary[x_val][y_val] = total
+    #         total += 1
+    #         y_val += key
+    #     x_val += key
+    #     print(x_val)
+
+    
+    # reverse_dictionary = dict()
+
+    # for k, v in dictionary.items():
+    #     for subk, subv in v.items():
+    #         reverse_dictionary[subv] = [k, subk]
+
+    # print("Finished Creating Dictionaries")
+
+    # Consider what the max possible size will be. IFwe can round the input values in to the nearest 0.001
+    # we can say that for each dimension (1 - 0) / 0.001 = 1000
+
+    multiplier = tf.constant(mult, dtype = x.dtype)
+    tf.round(x * multiplier) / multiplier
+
+    # Calculated encoded version of time series of input data
+    grid_encoded_input = []
+    a_mod = (mult * mult) + 1
+    b_mod = mult
+    for i in range(n_input):
+        dim_0 = x[0][i]
+        dim_1 = x[0][i + n_input]
+        a = tf.round(dim_0 * multiplier) / multiplier
+        b = tf.round(dim_1 * multiplier) / multiplier
+        a = a * a_mod
+        b = b * b_mod
+        grid_encoded_input.append(a+b)
+
+    grid_encoded_input = tf.convert_to_tensor(grid_encoded_input, dtype = tf.float32)
+    # print("State of encoded:")
+    # print(grid_encoded_input)
+     
+    # vocab_size = len(dictionary)
+    vocab_size = ( (mult * mult) + mult ) + mult + 1
+
     # number of units in RNN cell
-    n_hidden = 512
+    n_hidden = 512 # STANDARD VALUE
+
     # RNN output node weights and biases
-    weights = {
-        'out': tf.Variable(tf.random_normal([n_hidden, vocab_size]))
-    }
-    biases = {
-        'out': tf.Variable(tf.random_normal([vocab_size]))
-    }
+    weights = {'out': tf.Variable(tf.random_normal([n_hidden, vocab_size]), trainable=True)}
+    biases = {'out': tf.Variable(tf.random_normal([vocab_size]), trainable=True)}
 
     # reshape to [1, n_input]
-    x = tf.reshape(x, [-1, n_input])
+    input_x = tf.reshape(grid_encoded_input, [-1, n_input])
+    # print("Result of reshape")
+    # print(input_x)
 
     # Generate a n_input-element sequence of inputs
     # (eg. [had] [a] [general] -> [20] [6] [33])
-    x = tf.split(x,n_input,1)
+    input_x = tf.split(input_x, n_input,1)
+    # print(input_x)
 
     # 1-layer LSTM with n_hidden units.
     rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(n_hidden)
 
     # generate prediction
-    outputs, states = tf.nn.rnn_cell.static_rnn(rnn_cell, x, dtype=tf.float32)
+    # outputs, states = tf.nn.rnn_cell.static_rnn(rnn_cell, x, dtype=tf.float32)
+    outputs, _ = tf.nn.static_rnn(rnn_cell, input_x, dtype=tf.float32)
 
     # there are n_input outputs but
     # we only want the last output
-    return tf.matmul(outputs, weights['out']) + biases['out']
+    true_outputs = tf.matmul(outputs, weights['out']) + biases['out']
+    print(true_outputs.shape)
+    # true_outputs = true_outputs.eval(session = 'sess')
+
+    decoded_output = np.zeros((1, 100))
+    const = tf.constant(1001, dtype = tf.int64)
+    print()
+
+    for i in range(n_input):
+        tmp = tf.math.argmax(true_outputs[i][0])
+        print(tmp[0])
+        a = 0
+        while tf.greater_equal(tmp, const)[0]:
+            tmp -= 1001
+            a += 1
+        decoded_output[0][i] = a / a_mod
+        decoded_output[0][i + n_input] = tf.float32(tmp) / b_mod
+
+    decoded_output = tf.convert_to_tensor(decoded_output, dtype = tf.float32)
+    return decoded_output
