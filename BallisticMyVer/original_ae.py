@@ -21,13 +21,16 @@ class AE(object):
         self.global_step = tf.placeholder(tf.int32, shape=(), name="step_id")
         self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 
-
-        self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
-        self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
+        if with_rnn == False:
+            self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
+            self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
+        else:
+            self.x = tf.placeholder(tf.float32, [None, self.traj_length], name="rnn_input")
+            self.true_x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="real_x")
 
         self.create_net(with_rnn)
 
-        self.create_loss()
+        self.create_loss(with_rnn)
         self.create_optimizer()
         self.saver = tf.train.Saver(tf.trainable_variables())
 
@@ -52,8 +55,8 @@ class AE(object):
         else:
             LSTM_out = LSTM_layer(self.x)
             self.layers = [LSTM_out]
-            self.rnn_output_image = tf.reshape(self.layers[-1], [-1, 2, self.traj_length, 1])
-            self.layers.append(self.rnn_output_image)
+            rnn_output_image = tf.reshape(self.layers[-1], [-1, 1, self.traj_length, 1])
+            self.layers.append(rnn_output_image)
 
         with tf.variable_scope('encoder') as vs:
             self.create_encoder_conv([2])
@@ -73,9 +76,13 @@ class AE(object):
             self.decoded  = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], 100, activation = 'identity', name = "decoded").output()
             self.layers.append(self.decoded)
 
-    def create_loss(self):
-        recon_loss = math_ops.squared_difference(self.x,self.decoded, name = "recon_loss")
-        self.loss = tf.reduce_mean(recon_loss, 0, name = "loss")
+    def create_loss(self, with_rnn):
+        if with_rnn == False:
+            recon_loss = math_ops.squared_difference(self.x,self.decoded, name = "recon_loss")
+            self.loss = tf.reduce_mean(recon_loss, 0, name = "loss")
+        else:
+            recon_loss = math_ops.squared_difference(self.true_x,self.decoded, name = "recon_loss")
+            self.loss = tf.reduce_mean(recon_loss, 0, name = "loss")
 
 
     def create_encoder_fc(self, conf):

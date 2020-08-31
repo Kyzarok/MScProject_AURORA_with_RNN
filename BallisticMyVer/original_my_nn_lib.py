@@ -14,6 +14,8 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
+import tensorflow as tf2
+
 def xavier_init(shape, constant=1):
     """ Xavier initialization of network weights"""
     # https://stackoverflow.com/questions/33640581/how-to-do-xavier-initialization-on-tensorflow
@@ -247,7 +249,7 @@ class Conv2Dtranspose(object):
         return self.output
 
 
-def LSTM_layer(x):
+def LSTM_layer(input):
     #10^-3
     key = 0.001
     mult = int(1/key)
@@ -255,8 +257,8 @@ def LSTM_layer(x):
 
     # dictionary = dict()
     # print("Begin Creating Dictionaries")
-    # x_val = tf.constant(0, dtype = x.dtype)
-    # total = tf.constant(0, dtype = x.dtype)
+    # x_val = tf.constant(0, dtype = tf.float32)
+    # total = tf.constant(0, dtype = tf.float32)
 
     # # x = tf.constant([5, 4, 6, 7])
     # # y = tf.constant([5, 2, 5, 10])
@@ -265,7 +267,7 @@ def LSTM_layer(x):
 
     # # print(tf.math.greater_equal(x_val, total))
     # for i in range(mult + 1):
-    #     y_val = tf.constant(0, dtype = x.dtype)
+    #     y_val = tf.constant(0, dtype = tf.float32)
     #     dictionary[x_val] = dict()
     #     for j in range(mult + 1):
     #         dictionary[x_val][y_val] = total
@@ -278,6 +280,7 @@ def LSTM_layer(x):
     # reverse_dictionary = dict()
 
     # for k, v in dictionary.items():
+    #     print(k)
     #     for subk, subv in v.items():
     #         reverse_dictionary[subv] = [k, subk]
 
@@ -286,23 +289,24 @@ def LSTM_layer(x):
     # Consider what the max possible size will be. IFwe can round the input values in to the nearest 0.001
     # we can say that for each dimension (1 - 0) / 0.001 = 1000
 
-    multiplier = tf.constant(mult, dtype = x.dtype)
-    tf.round(x * multiplier) / multiplier
+    # multiplier = tf.constant(mult, dtype = tf.float32)
+    # tf.round(x * multiplier) / multiplier
 
-    # Calculated encoded version of time series of input data
-    grid_encoded_input = []
-    a_mod = (mult * mult) + 1
-    b_mod = mult
-    for i in range(n_input):
-        dim_0 = x[0][i]
-        dim_1 = x[0][i + n_input]
-        a = tf.round(dim_0 * multiplier) / multiplier
-        b = tf.round(dim_1 * multiplier) / multiplier
-        a = a * a_mod
-        b = b * b_mod
-        grid_encoded_input.append(a+b)
+    # # Calculated encoded version of time series of input data
+    # grid_encoded_input = []
+    # a_mod = (mult * mult) + 1
+    # b_mod = mult
+    # for i in range(n_input):
+    #     dim_0 = x[0][i]
+    #     dim_1 = x[0][i + n_input]
+    #     a = tf.round(dim_0 * multiplier) / multiplier
+    #     b = tf.round(dim_1 * multiplier) / multiplier
+    #     # a = a * a_mod
+    #     # b = b * b_mod
+    #     index = dictionary[a][b]
+    #     grid_encoded_input.append(index)
 
-    grid_encoded_input = tf.convert_to_tensor(grid_encoded_input, dtype = tf.float32)
+    # grid_encoded_input = tf.convert_to_tensor(grid_encoded_input, dtype = tf.float32)
     # print("State of encoded:")
     # print(grid_encoded_input)
      
@@ -317,7 +321,7 @@ def LSTM_layer(x):
     biases = {'out': tf.Variable(tf.random_normal([vocab_size]), trainable=True)}
 
     # reshape to [1, n_input]
-    input_x = tf.reshape(grid_encoded_input, [-1, n_input])
+    input_x = tf.reshape(input, [-1, n_input])
     # print("Result of reshape")
     # print(input_x)
 
@@ -336,22 +340,27 @@ def LSTM_layer(x):
     # there are n_input outputs but
     # we only want the last output
     true_outputs = tf.matmul(outputs, weights['out']) + biases['out']
-    print(true_outputs.shape)
+    # print(true_outputs.shape)
     # true_outputs = true_outputs.eval(session = 'sess')
 
-    decoded_output = np.zeros((1, 100))
-    const = tf.constant(1001, dtype = tf.int64)
-    print()
+    # decoded_output = np.zeros((1, 100))
+    # const = tf.constant(1001, dtype = tf.int64)
+    # print()
+    # for i in range(n_input):
+    #     tmp = tf.math.argmax(true_outputs[i][0])
+    #     a, b = reverse_dictionary[tmp]
+    #     decoded_output[0][i] = a 
+    #     decoded_output[0][i + n_input] = b
 
-    for i in range(n_input):
-        tmp = tf.math.argmax(true_outputs[i][0])
-        print(tmp[0])
-        a = 0
-        while tf.greater_equal(tmp, const)[0]:
-            tmp -= 1001
-            a += 1
-        decoded_output[0][i] = a / a_mod
-        decoded_output[0][i + n_input] = tf.float32(tmp) / b_mod
-
-    decoded_output = tf.convert_to_tensor(decoded_output, dtype = tf.float32)
-    return decoded_output
+    # for i in range(n_input):
+    #     tmp = tf.math.argmax(true_outputs[i][0])
+        
+    #     a = 0
+    #     while tf.greater_equal(tmp, const)[0]:
+    #         tmp -= 1001
+    #         a += 1
+    #     decoded_output[0][i] = a / a_mod
+    #     decoded_output[0][i + n_input] = tf.float32(tmp) / b_mod
+    print("lstm")
+    print(true_outputs.shape)
+    return true_outputs

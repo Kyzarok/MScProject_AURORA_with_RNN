@@ -27,6 +27,10 @@ class indiv():
     self.max_point = []
 
     self.curiosity_score = 0.0
+
+
+    self.key = 0.001
+    self.mult = int(1/self.key)
   
   def set_bd(self, bd):
     self.bd = bd
@@ -66,6 +70,21 @@ class indiv():
     trans = np.array(self.cart_traj)
     return trans.T
 
+  def get_lstm_embed_traj(self):
+    a_mod = (self.mult * self.mult) + 1
+    b_mod = self.mult
+    ret = np.zeros((1, 50))
+    for i in range(NB_STEP):
+      dim_0 = self.scaled_traj_image[0][i]
+      dim_1 = self.scaled_traj_image[0][i + NB_STEP]
+      a = round(dim_0 * self.mult) / self.mult
+      b = round(dim_1 * self.mult) / self.mult
+      a = a * a_mod
+      b = b * b_mod
+      ret[0][i] = a + b
+
+    return ret
+
   def get_scaled_image(self, _max, _min):
     data = self.cart_traj
     den = (_max - _min).T
@@ -75,9 +94,10 @@ class indiv():
     data /= den
     res = [ r*2 - 1 for r in data]
 
-    scaled_traj_image = self.get_traj_image(res)
+    self.scaled_traj_image = self.get_traj_image(res)
+    
 
-    return scaled_traj_image
+    return self.scaled_traj_image
 
   def get_traj_image(self, data):
     ret = np.zeros((1, 100))

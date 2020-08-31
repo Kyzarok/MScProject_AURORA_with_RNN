@@ -15,13 +15,15 @@ import matplotlib.pyplot as plt
 POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
-NUM_EPOCH = 25000
-# NUM_EPOCH = 25
+# NUM_EPOCH = 25000
+NUM_EPOCH = 1
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
-NB_QD_ITERATIONS = 200
-NB_QD_BATCHES = 5000
+# NB_QD_ITERATIONS = 200
+# NB_QD_BATCHES = 5000
+NB_QD_ITERATIONS = 10
+NB_QD_BATCHES = 50
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -80,7 +82,7 @@ def split_dataset(pop_size):
         t_v_list.append([training_indices, val_indices])
     return t_v_list
 
-def train_ae(autoencoder, population, when_trained):
+def train_ae(autoencoder, population, when_trained, with_rnn):
     _max, _min = get_scaling_vars(population)
 
     t_loss_record = []
@@ -121,9 +123,16 @@ def train_ae(autoencoder, population, when_trained):
                 # Actual training
                 for t in training_data:
                     member = population[t]
-                    image = member.get_scaled_image(_max, _min)
-                    _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                    t_loss += np.mean(loss)
+                    if with_rnn == True:
+                        true_image = member.get_scaled_image(_max, _min)
+                        rnn_image = member.get_lstm_embed_traj()
+                        _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        t_loss += np.mean(loss)
+                        print(t_loss)
+                    else:
+                        image = member.get_scaled_image(_max, _min)
+                        _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        t_loss += np.mean(loss)
 
                 t_loss_record.append(t_loss)
 
@@ -131,9 +140,15 @@ def train_ae(autoencoder, population, when_trained):
                 # Calcualte epoch validation loss
                 for v in validation_data:
                     member = population[v]
-                    image = member.get_scaled_image(_max, _min)
-                    loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
-                    v_loss += np.mean(loss)
+                    if with_rnn == True:
+                        true_image = member.get_scaled_image(_max, _min)
+                        rnn_image = member.get_lstm_embed_traj()
+                        loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
+                        v_loss += np.mean(loss)
+                    else:
+                        image = member.get_scaled_image(_max, _min)
+                        loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
+                        v_loss += np.mean(loss)
 
                 v_loss_record.append(v_loss)
 
@@ -480,7 +495,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     my_ae = AE(with_rnn)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae, t_error, v_error = train_ae(my_ae, pop, 0)
+    my_ae, t_error, v_error = train_ae(my_ae, pop, 0, with_rnn)
 
     # Create container for laten space representation
     latent_space = []
@@ -491,11 +506,19 @@ def AURORA_incremental_ballistic_task(with_rnn):
     with tf.Session() as sess:
         my_ae.saver.restore(sess, "MY_MODEL")
         for member in pop:
-            image = member.get_scaled_image(_max, _min)
-            # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-            member.set_bd(member_bd)
-            latent_space.append(member_bd)
+            if with_rnn == False:
+                image = member.get_scaled_image(_max, _min)
+                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member.set_bd(member_bd)
+                latent_space.append(member_bd)
+            else:
+                true_image = member.get_scaled_image(_max, _min)
+                rnn_image = member.get_lstm_embed_traj()
+                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member.set_bd(member_bd)
+                latent_space.append(member_bd)
     
     # Record current latent space
     plot_latent_gt(pop, 0)
@@ -543,9 +566,21 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 # 2. Mutate and evaluate the chosen controller
                 new_indiv = mut_eval(controller)
 
+                new_bd = None
+
                 # 3. Get the Behavioural Descriptor for the new individual
-                image = new_indiv.get_scaled_image(_max, _min)
-                new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                if with_rnn == False:
+                    image = new_indiv.get_scaled_image(_max, _min)
+                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                else:
+                    true_image = new_indiv.get_scaled_image(_max, _min)
+                    rnn_image = new_indiv.get_lstm_embed_traj()
+                    # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+
+
+                # image = new_indiv.get_scaled_image(_max, _min)
+                # new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
@@ -585,7 +620,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
                 # 6. Retrain Autoencoder after a number of QD iterations
                 print("Training Autoencoder, this is training session: " + str(network_activation + 2) + "/" + str(len(RETRAIN_ITER) + 1))
-                my_ae, t_error, v_error = train_ae(my_ae, pop, generation)
+                my_ae, t_error, v_error = train_ae(my_ae, pop, generation, with_rnn)
                 print("Completed retraining")
 
                 tmp = t_error.copy()
@@ -602,10 +637,22 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 with tf.Session() as sess:
                     my_ae.saver.restore(sess, "MY_MODEL")
                     for member in pop:
-                        image = member.get_scaled_image(_max, _min)
-                        member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-                        member.set_bd(member_bd)
-                        latent_space.append(member_bd)
+                        # image = member.get_scaled_image(_max, _min)
+                        # member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                        # member.set_bd(member_bd)
+                        # latent_space.append(member_bd)
+
+                        if with_rnn == False:
+                            image = member.get_scaled_image(_max, _min)
+                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                            member.set_bd(member_bd)
+                            latent_space.append(member_bd)
+                        else:
+                            true_image = member.get_scaled_image(_max, _min)
+                            rnn_image = member.get_lstm_embed_traj()
+                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                            member.set_bd(member_bd)
+                            latent_space.append(member_bd)
 
                 # 9. Calculate new novelty threshold to ensure population size less than 10000
                 threshold = calculate_novelty_threshold(latent_space)
@@ -698,7 +745,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     my_ae = AE(with_rnn)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae, t_error, v_error = train_ae(my_ae, training_pop, 0)
+    my_ae, t_error, v_error = train_ae(my_ae, training_pop, 0, with_rnn)
 
     # Create container for laten space representation
     latent_space = []
@@ -727,11 +774,19 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     with tf.Session() as sess:
         my_ae.saver.restore(sess, "MY_MODEL")
         for member in pop:
-            image = member.get_scaled_image(_max, _min)
-            # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-            member.set_bd(member_bd)
-            latent_space.append(member_bd)
+            if with_rnn == False:
+                image = member.get_scaled_image(_max, _min)
+                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member.set_bd(member_bd)
+                latent_space.append(member_bd)
+            else:
+                true_image = member.get_scaled_image(_max, _min)
+                rnn_image = member.get_lstm_embed_traj()
+                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member.set_bd(member_bd)
+                latent_space.append(member_bd)
     
     # Record current latent space
     plot_latent_gt(pop, 0)
@@ -774,9 +829,17 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                 # 2. Mutate and evaluate the chosen controller
                 new_indiv = mut_eval(controller)
 
+                new_bd = None
+
                 # 3. Get the Behavioural Descriptor for the new individual
-                image = new_indiv.get_scaled_image(_max, _min)
-                new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                if with_rnn == False:
+                    image = new_indiv.get_scaled_image(_max, _min)
+                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                else:
+                    true_image = new_indiv.get_scaled_image(_max, _min)
+                    rnn_image = new_indiv.get_lstm_embed_traj()
+                    # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
