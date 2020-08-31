@@ -9,45 +9,49 @@ from tensorflow.python.ops import math_ops
 
 from original_my_nn_lib import Convolution2D, MaxPooling2D, Conv2Dtranspose
 from original_my_nn_lib import FullConnected, ReadOutLayer
+from original_my_nn_lib import LSTM
 
 
 class AE(object):
     
-    def __init__(self):
+    def __init__(self, with_rnn):
+        # Same settings for both networks
         self.traj_length = 50
-        self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
-
-        self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
-        self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
         self.latent_dim = 2
-        
         self.global_step = tf.placeholder(tf.int32, shape=(), name="step_id")
+        self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 
-        self.create_net()
+        self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
+        self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
+
+        self.create_net(with_rnn)
+
         self.create_loss()
         self.create_optimizer()
         self.saver = tf.train.Saver(tf.trainable_variables())
 
     def create_optimizer(self):
         self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, 250000, 0.9,name="learning_rate")
-        self.optimizer=tf.train.AdagradOptimizer(self.learning_rate)
-        gradients, variables = zip(*self.optimizer.compute_gradients(self.loss))
+        optimizer=tf.train.AdagradOptimizer(self.learning_rate)
+        gradients, variables = zip(*optimizer.compute_gradients(self.loss))
         gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
-        self.train_step = self.optimizer.apply_gradients(zip(gradients, variables), name="train_step")
+        self.train_step = optimizer.apply_gradients(zip(gradients, variables), name="train_step")
         
-        self.reset_optimizer_op = tf.variables_initializer(self.optimizer.variables(), name="reset_optimizer")
+        self.reset_optimizer_op = tf.variables_initializer(optimizer.variables(), name="reset_optimizer")
 
-    
-    def step(self):
-        gradients, variables = zip(*self.optimizer.compute_gradients(self.loss))
-        gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
-        self.optimizer.apply_gradients(zip(gradients, variables))
+    # def step(self):
+    #     gradients, variables = zip(*self.optimizer.compute_gradients(self.loss))
+    #     gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
+    #     self.optimizer.apply_gradients(zip(gradients, variables))
 
-    def create_net(self):
+    def create_net(self, add_rnn):
         self.layers=[self.x_image]
+        if add_rnn == True:
+            LSTM_layer = LSTM(self.layers[-1], self.layers[-1].get_shape().as_list()[1]).output()
+            self.layers.append(LSTM_layer)
         with tf.variable_scope('encoder') as vs:
             self.create_encoder_conv([2])
-            self.create_encoder_fc([5]) 
+            self.create_encoder_fc([5])
 
             self.latent = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], self.latent_dim, activation='identity', name = "latent").output()
             self.layers.append(self.latent)

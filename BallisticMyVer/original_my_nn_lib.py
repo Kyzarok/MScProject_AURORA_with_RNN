@@ -245,3 +245,64 @@ class Conv2Dtranspose(object):
             self.output = linout
         
         return self.output
+
+
+# LSTM Layer
+class LSTM(object):
+    '''
+      constructor's args:
+
+    '''
+    def __init__(self, input, input_siz):
+        self.input = input
+        self.cell = tf.nn.rnn_cell.LSTMCell(num_units = 2)
+        print('Current weights')
+        print(self.cell.get_weights())
+        wshape = [2, 50]
+
+        w_cv = tf.Variable(xavier_init(wshape), trainable=True)
+        
+        self.w = w_cv
+        
+    def output(self):
+        
+        self.cell.set_weights(self.w)
+        linout = self.cell.apply(self.input)
+        shapeOut = [None, 2, 50, 1]
+        linout.set_shape(shapeOut)
+        print("LSTM: ")
+        print(shapeOut)                 
+        self.out = linout
+        
+        return self.out
+
+def LSTM_layer(x):
+
+    vocab_size = len(dictionary)
+    n_input = 3
+    # number of units in RNN cell
+    n_hidden = 512
+    # RNN output node weights and biases
+    weights = {
+        'out': tf.Variable(tf.random_normal([n_hidden, vocab_size]))
+    }
+    biases = {
+        'out': tf.Variable(tf.random_normal([vocab_size]))
+    }
+
+    # reshape to [1, n_input]
+    x = tf.reshape(x, [-1, n_input])
+
+    # Generate a n_input-element sequence of inputs
+    # (eg. [had] [a] [general] -> [20] [6] [33])
+    x = tf.split(x,n_input,1)
+
+    # 1-layer LSTM with n_hidden units.
+    rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(n_hidden)
+
+    # generate prediction
+    outputs, states = tf.nn.rnn_cell.static_rnn(rnn_cell, x, dtype=tf.float32)
+
+    # there are n_input outputs but
+    # we only want the last output
+    return tf.matmul(outputs, weights['out']) + biases['out']

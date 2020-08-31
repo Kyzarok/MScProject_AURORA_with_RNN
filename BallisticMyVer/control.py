@@ -6,6 +6,7 @@ import individual
 import random
 import math
 from original_ae import AE
+import sklearn
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
@@ -126,6 +127,7 @@ def train_ae(autoencoder, population, when_trained):
 
                 t_loss_record.append(t_loss)
 
+
                 # Calcualte epoch validation loss
                 for v in validation_data:
                     member = population[v]
@@ -175,7 +177,7 @@ def train_ae(autoencoder, population, when_trained):
     plt.title(title)
     save_name = "myplots/Loss_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
-    return autoencoder
+    return autoencoder, t_loss_record, v_loss_record
 
 def KLC(population):
     nb_bins = 30
@@ -200,38 +202,41 @@ def KLC(population):
     l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
     l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
 
-    D_KL_0 = 0.0
-    D_KL_1 = 0.0
-    e_i = 0.0
-    a_i = 0.0
-    for i in range(nb_bins):
-        # Case controlis necessary as these histograms exist to act as pseudo probability distributions
-        # In histograms, a bin may have 0 values
-        # In a probability distribution, there is always a minor chance something can happend
-        # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
+    D_KL_0 = sklearn.metrics.mutual_info_score(g_norm_0, l_norm_0)
+    D_KL_1 = sklearn.metrics.mutual_info_score(g_norm_1, l_norm_1)
 
-        if g_norm_0[i] == 0.0:
-            e_i = 0.00000001
-        else:
-            e_i = g_norm_0[i]
+    # D_KL_0 = 0.0
+    # D_KL_1 = 0.0
+    # e_i = 0.0
+    # a_i = 0.0
+    # for i in range(nb_bins):
+    #     # Case controlis necessary as these histograms exist to act as pseudo probability distributions
+    #     # In histograms, a bin may have 0 values
+    #     # In a probability distribution, there is always a minor chance something can happend
+    #     # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
 
-        if l_norm_0[i] == 0.0:
-            a_i = 0.00000001
-        else:
-            a_i = l_norm_0[i]
-        D_KL_0 += e_i * math.log(e_i / a_i)
+    #     if g_norm_0[i] == 0.0:
+    #         e_i = 0.00000001
+    #     else:
+    #         e_i = g_norm_0[i]
+
+    #     if l_norm_0[i] == 0.0:
+    #         a_i = 0.00000001
+    #     else:
+    #         a_i = l_norm_0[i]
+    #     D_KL_0 += e_i * math.log(e_i / a_i)
 
 
-        if g_norm_1[i] == 0.0:
-            e_i = 0.00000001
-        else:
-            e_i = g_norm_1[i]
+    #     if g_norm_1[i] == 0.0:
+    #         e_i = 0.00000001
+    #     else:
+    #         e_i = g_norm_1[i]
 
-        if l_norm_1[i] == 0.0:
-            a_i = 0.00000001
-        else:
-            a_i = l_norm_1[i]
-        D_KL_1 += e_i * math.log(e_i / a_i)
+    #     if l_norm_1[i] == 0.0:
+    #         a_i = 0.00000001
+    #     else:
+    #         a_i = l_norm_1[i]
+    #     D_KL_1 += e_i * math.log(e_i / a_i)
 
     D_KL = (D_KL_0 + D_KL_1) / 2
     return D_KL
@@ -391,8 +396,11 @@ def plot_latent_gt(population, when_trained):
     title = None
     if when_trained == 0:
         title = "Latent Space when Autoencoder Initially Trained"
+    elif when_trained == -1:
+        title = "Latent Space at Final Generation"
     else:
         title = "Latent Space when Autoencoder Retrained at Generation/Batch " + str(when_trained)
+    
     plt.title(title)
     save_name = "myplots/Latent_Space_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
@@ -404,6 +412,8 @@ def plot_latent_gt(population, when_trained):
     title = None
     if when_trained == 0:
         title = "Ground Truth when Autoencoder Initially Trained"
+    elif when_trained == -1:
+        title = "Ground Truth at Final Generation"
     else:
         title = "Ground Truth when Autoencoder Retrained at Generation/Batch " + str(when_trained)
     plt.title(title)
@@ -432,7 +442,7 @@ def make_wheel(population):
     return roulette_wheel
 
 
-def AURORA_ballistic_task():
+def AURORA_incremental_ballistic_task(with_rnn):
     # Randomly generate some controllers
     init_size = POPULATION_INITIAL_SIZE            # Initial size of population
     pop = []                                        # Container for population
@@ -450,12 +460,27 @@ def AURORA_ballistic_task():
         member.eval(genotype)
     print("Complete")
 
+    # this_one = np.array(pop[0].cart_traj)
+    # cell = tf.nn.rnn_cell.LSTMCell(num_units = 2)
+    # print('Should be here')
+    # print(cell.state_size)
+    # this_traj = np.zeros((50, 2, 1))
+    # for i in range(50):
+    #     this_traj[i][0] = this_one[i][0]
+    #     this_traj[i][1] = this_one[i][1]
+    # h_prev = cell.__call__(this_traj[0], state=[1, [0, 0]])
+    # for i in range(1, 50):
+    #     h_next = cell.__call__(this_traj[i], state=[ 1, [ h_prev[0], h_prev[1] ] ] )
+    #     print(h_next)
+    #     h_prev = h_next
+    # print(cell.get_weights())
+
     # Create the dimension reduction algorithm (the Autoencoder)
     print("Creating network, printing autoencoder layers")
-    my_ae = AE()
+    my_ae = AE(with_rnn)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae = train_ae(my_ae, pop, 0)
+    my_ae, t_error, v_error = train_ae(my_ae, pop, 0)
 
     # Create container for laten space representation
     latent_space = []
@@ -483,6 +508,10 @@ def AURORA_ballistic_task():
     klc_log = []
     just_finished_training = True
     roulette_wheel = []
+    repertoire_size = []
+    big_error_log = [ [] for i in range(2) ]
+    big_error_log[0] = t_error
+    big_error_log[1] = v_error
     
     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
     for generation in range(NB_QD_BATCHES):
@@ -528,10 +557,12 @@ def AURORA_ballistic_task():
                         new_indiv.set_novelty(novelty)
                         pop.append(new_indiv)
 
+                        # Increase curiosity score of individual and modify wheel
                         pop[index].increase_curiosity()
                         roulette_wheel = make_wheel(pop)
 
-                    else:                                     #    If the individual is NOT novel
+                    else:                                    #    If the individual is NOT novel
+                        # Decrease curiosity score of individual and modify wheel 
                         pop[index].decrease_curiosity()
                         roulette_wheel = make_wheel(pop)
                 else:                                         #    If the individual dominated another individual
@@ -539,6 +570,7 @@ def AURORA_ballistic_task():
                     new_indiv.set_novelty(novelty)
                     pop[dominated] = new_indiv
 
+                    # Increase curiosity score of individual and modify wheel
                     pop[index].increase_curiosity()
                     roulette_wheel = make_wheel(pop)
 
@@ -546,15 +578,20 @@ def AURORA_ballistic_task():
         just_finished_training = False
 
         # Check if this generation is before the last retraining session
-        if generation < RETRAIN_ITER[-1]:
+        if generation <= RETRAIN_ITER[-1]:
             if generation == RETRAIN_ITER[network_activation]:
 
                 print("Finished QD iterations")
 
                 # 6. Retrain Autoencoder after a number of QD iterations
                 print("Training Autoencoder, this is training session: " + str(network_activation + 2) + "/" + str(len(RETRAIN_ITER) + 1))
-                my_ae = train_ae(my_ae, pop, generation)
+                my_ae, t_error, v_error = train_ae(my_ae, pop, generation)
                 print("Completed retraining")
+
+                tmp = t_error.copy()
+                big_error_log[0] = big_error_log[0] + tmp
+                tmp = v_error.copy()
+                big_error_log[1] = big_error_log[1] + tmp
 
                 # 7. Clear latent space
                 latent_space = []
@@ -600,6 +637,7 @@ def AURORA_ballistic_task():
         # 13. For each batch/generation, get the Kullback Liebler Coverage value
         current_klc = KLC(pop)
         klc_log.append(current_klc)
+        repertoire_size.append(len(pop))
 
     plt.clf()
     plt.plot(klc_log, label="KLC value per generation")
@@ -609,18 +647,214 @@ def AURORA_ballistic_task():
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
+    np.save("inc_KLC.npy", klc_log)
+
+
+    plt.clf()
+    plt.plot(repertoire_size, label="Repertoire Size")
+    plt.xlabel("Generation")
+    plt.ylabel("Number of controllers")
+    title = "Repertoire Size"
+    plt.title(title)
+    save_name = "myplots/RepSize"
+    plt.savefig(save_name)
+    np.save("inc_rep_size.npy", repertoire_size)
+    
+    plot_latent_gt(pop, -1)
+
+    plt.clf()
+    plt.plot(big_error_log[0], label="Training Loss")
+    plt.plot(big_error_log[1], label="Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Reconstruction Loss")
+    plt.legend()
+    title = "Reconstruction Loss"
+    plt.title(title)
+    save_name = "myplots/Full_loss_plot"
+    plt.savefig(save_name)
+    np.save("inc_error_log.npy", big_error_log)
     
 
+# The only difference between the other basic ballistic task is that this is only trained once and with more samples    
+def AURORA_pretrained_ballistic_task(with_rnn):
+    init_size = 5 * POPULATION_INITIAL_SIZE            # Initial size of population
+    training_pop = []                                  # Container for training population
+    print("Creating training population container")
+    for b in range(init_size):
+        new_indiv = individual.indiv()
+        training_pop.append(new_indiv)
+    print("Complete")
 
-        
+    # Collect sensory data of the generated controllers. In the case of the ballistic task this is the trajectories but any sensory data can be considered
+    # The collected sensory data makes up the first dataset
+    print("Evaluating training population")
+    for member in training_pop:
+        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+        member.eval(genotype)
+    print("Complete")
+
+    # Create the dimension reduction algorithm (the Autoencoder)
+    print("Creating network, printing autoencoder layers")
+    my_ae = AE(with_rnn)
+
+    # Train the dimension reduction algorithm (the Autoencoder) on the dataset
+    my_ae, t_error, v_error = train_ae(my_ae, training_pop, 0)
+
+    # Create container for laten space representation
+    latent_space = []
+
+    # Create actual population
+    init_size = POPULATION_INITIAL_SIZE 
+    pop = []
+    print("Creating population container")
+    for b in range(init_size):
+        new_indiv = individual.indiv()
+        pop.append(new_indiv)
+    print("Complete")
+
+    # Collect sensory data of the generated controllers. In the case of the ballistic task this is the trajectories but any sensory data can be considered
+    # The collected sensory data makes up the first dataset
+    print("Evaluating current population")
+    for member in pop:
+        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+        member.eval(genotype)
+    print("Complete")
+
+
+    _max, _min = get_scaling_vars(pop)
+
+    # Use the now trained Autoencoder to get the behavioural descriptors
+    with tf.Session() as sess:
+        my_ae.saver.restore(sess, "MY_MODEL")
+        for member in pop:
+            image = member.get_scaled_image(_max, _min)
+            # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
+            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+            member.set_bd(member_bd)
+            latent_space.append(member_bd)
+    
+    # Record current latent space
+    plot_latent_gt(pop, 0)
+
+    # Calculate starting novelty threshold
+    threshold = INITIAL_NOVLETY
+
+    # These are needed for the main algorithm
+    klc_log = []
+    roulette_wheel = []
+    repertoire_size = []
+    big_error_log = [ [] for i in range(2) ]
+    big_error_log[0] = t_error
+    big_error_log[1] = v_error
+    
+    # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
+    for generation in range(NB_QD_BATCHES):
+        _max, _min = get_scaling_vars(pop)
+
+        roulette_wheel = make_wheel(pop)
+
+        # Begin Quality Diversity iterations
+        with tf.Session() as sess:
+            my_ae.saver.restore(sess, "MY_MODEL")
+            print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+
+            for j in range(NB_QD_ITERATIONS):
+
+                # 1. Select controller from population using curiosity proportionate selection
+                selector = random.uniform(0, 1)
+                index = 0
+                cumulative = roulette_wheel[index]
+                while(selector <= cumulative):
+                    index += 1
+                    cumulative += roulette_wheel[index]
+
+                this_indiv = pop[index]
+                controller = this_indiv.get_key()
+
+                # 2. Mutate and evaluate the chosen controller
+                new_indiv = mut_eval(controller)
+
+                # 3. Get the Behavioural Descriptor for the new individual
+                image = new_indiv.get_scaled_image(_max, _min)
+                new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+
+                # 4. See if the new Behavioural Descriptor is novel enough
+                novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
+
+                # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
+                if dominated == -1:                           #    If the individual did not dominate another individual
+                    if novelty >= threshold:                  #    If the individual is novel
+                        new_indiv.set_bd(new_bd)
+                        new_indiv.set_novelty(novelty)
+                        pop.append(new_indiv)
+
+                        # Increase curiosity score of individual and modify wheel
+                        pop[index].increase_curiosity()
+                        roulette_wheel = make_wheel(pop)
+
+                    else:                                    #    If the individual is NOT novel
+                        # Decrease curiosity score of individual and modify wheel 
+                        pop[index].decrease_curiosity()
+                        roulette_wheel = make_wheel(pop)
+                else:                                         #    If the individual dominated another individual
+                    new_indiv.set_bd(new_bd)
+                    new_indiv.set_novelty(novelty)
+                    pop[dominated] = new_indiv
+
+                    # Increase curiosity score of individual and modify wheel
+                    pop[index].increase_curiosity()
+                    roulette_wheel = make_wheel(pop)
+            
+        # 6. For each batch/generation, get the Kullback Liebler Coverage value
+        current_klc = KLC(pop)
+        klc_log.append(current_klc)
+        repertoire_size.append(len(pop))
+
+    plt.clf()
+    plt.plot(klc_log, label="KLC value per generation")
+    plt.xlabel("Generation")
+    plt.ylabel("Kullback-Liebler Divergence")
+    title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.title(title)
+    save_name = "myplots/KLC"
+    plt.savefig(save_name)
+    np.save("pre_KLC.npy", klc_log)
+
+    plt.clf()
+    plt.plot(repertoire_size, label="Repertoire Size")
+    plt.xlabel("Generation")
+    plt.ylabel("Number of controllers")
+    title = "Repertoire Size"
+    plt.title(title)
+    save_name = "myplots/RepSize"
+    plt.savefig(save_name)
+    np.save("pre_KLC.npy", klc_log)
+    
+    plot_latent_gt(pop, -1)
+
+    plt.clf()
+    plt.plot(big_error_log[0], label="Training Loss")
+    plt.plot(big_error_log[1], label="Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Reconstruction Loss")
+    plt.legend()
+    title = "Reconstruction Loss"
+    plt.title(title)
+    save_name = "myplots/Full_loss_plot"
+    plt.savefig(save_name)
+    np.save("pre_error_log.npy", big_error_log)   
 
  
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--control', type=str, default='ballistic', help = "Which simulation you want to run")
+    parser.add_argument('--version', type=str, default='incremental', help = "Which version of AURORA-AE do you want to run? 'incremental' or 'pretrained'?")
+    parser.add_argument('--with_RNN', type=bool, default=False, help = "Do you want to run the RNN version? 'True' or 'False'")
     args = parser.parse_args()
-    if args.control == "ballistic":
-        AURORA_ballistic_task()
+    if args.version == "pretrained":
+        AURORA_pretrained_ballistic_task(args.with_RNN)
+    elif args.version == "incremental":
+        AURORA_incremental_ballistic_task(args.with_RNN)
+    
 
