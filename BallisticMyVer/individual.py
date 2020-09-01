@@ -29,7 +29,7 @@ class indiv():
     self.curiosity_score = 0.0
 
 
-    self.key = 0.001
+    self.key = 0.01
     self.mult = int(1/self.key)
   
   def set_bd(self, bd):

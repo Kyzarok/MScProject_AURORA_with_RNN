@@ -53,7 +53,7 @@ class AE(object):
             self.layers=[self.x_image]
 
         else:
-            LSTM_out = LSTM_layer(self.x)
+            LSTM_out = LSTM_layer(self.x).output()
             self.layers = [LSTM_out]
             rnn_output_image = tf.reshape(self.layers[-1], [-1, 1, self.traj_length, 1])
             self.layers.append(rnn_output_image)

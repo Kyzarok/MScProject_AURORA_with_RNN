@@ -6,7 +6,7 @@ import individual
 import random
 import math
 from original_ae import AE
-import sklearn
+from sklearn.metrics import mutual_info_score
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
@@ -15,15 +15,15 @@ import matplotlib.pyplot as plt
 POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
-# NUM_EPOCH = 25000
-NUM_EPOCH = 1
+NUM_EPOCH = 25000
+# NUM_EPOCH = 1
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
-# NB_QD_ITERATIONS = 200
-# NB_QD_BATCHES = 5000
-NB_QD_ITERATIONS = 10
-NB_QD_BATCHES = 50
+NB_QD_ITERATIONS = 200
+NB_QD_BATCHES = 5000
+# NB_QD_ITERATIONS = 10
+# NB_QD_BATCHES = 50
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -128,7 +128,6 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                         rnn_image = member.get_lstm_embed_traj()
                         _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
                         t_loss += np.mean(loss)
-                        print(t_loss)
                     else:
                         image = member.get_scaled_image(_max, _min)
                         _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
@@ -217,44 +216,45 @@ def KLC(population):
     l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
     l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
 
-    D_KL_0 = sklearn.metrics.mutual_info_score(g_norm_0, l_norm_0)
-    D_KL_1 = sklearn.metrics.mutual_info_score(g_norm_1, l_norm_1)
+    D_KL_0 = mutual_info_score(g_norm_0, l_norm_0)
+    D_KL_1 = mutual_info_score(g_norm_1, l_norm_1)
+    sk_D_KL = (D_KL_0 + D_KL_1) / 2
 
-    # D_KL_0 = 0.0
-    # D_KL_1 = 0.0
-    # e_i = 0.0
-    # a_i = 0.0
-    # for i in range(nb_bins):
-    #     # Case controlis necessary as these histograms exist to act as pseudo probability distributions
-    #     # In histograms, a bin may have 0 values
-    #     # In a probability distribution, there is always a minor chance something can happend
-    #     # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
+    D_KL_0 = 0.0
+    D_KL_1 = 0.0
+    e_i = 0.0
+    a_i = 0.0
+    for i in range(nb_bins):
+        # Case controlis necessary as these histograms exist to act as pseudo probability distributions
+        # In histograms, a bin may have 0 values
+        # In a probability distribution, there is always a minor chance something can happend
+        # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
 
-    #     if g_norm_0[i] == 0.0:
-    #         e_i = 0.00000001
-    #     else:
-    #         e_i = g_norm_0[i]
+        if g_norm_0[i] == 0.0:
+            e_i = 0.00000001
+        else:
+            e_i = g_norm_0[i]
 
-    #     if l_norm_0[i] == 0.0:
-    #         a_i = 0.00000001
-    #     else:
-    #         a_i = l_norm_0[i]
-    #     D_KL_0 += e_i * math.log(e_i / a_i)
+        if l_norm_0[i] == 0.0:
+            a_i = 0.00000001
+        else:
+            a_i = l_norm_0[i]
+        D_KL_0 += e_i * math.log(e_i / a_i)
 
 
-    #     if g_norm_1[i] == 0.0:
-    #         e_i = 0.00000001
-    #     else:
-    #         e_i = g_norm_1[i]
+        if g_norm_1[i] == 0.0:
+            e_i = 0.00000001
+        else:
+            e_i = g_norm_1[i]
 
-    #     if l_norm_1[i] == 0.0:
-    #         a_i = 0.00000001
-    #     else:
-    #         a_i = l_norm_1[i]
-    #     D_KL_1 += e_i * math.log(e_i / a_i)
+        if l_norm_1[i] == 0.0:
+            a_i = 0.00000001
+        else:
+            a_i = l_norm_1[i]
+        D_KL_1 += e_i * math.log(e_i / a_i)
 
     D_KL = (D_KL_0 + D_KL_1) / 2
-    return D_KL
+    return D_KL, sk_D_KL
 
 def calculate_novelty_threshold(latent_space):
 
@@ -528,7 +528,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
     # These are needed for the main algorithm
     network_activation = 0
-    klc_log = []
+    klc_log = [[], []] # Record my ver and the sklearn ver
     just_finished_training = True
     roulette_wheel = []
     repertoire_size = []
@@ -556,7 +556,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 selector = random.uniform(0, 1)
                 index = 0
                 cumulative = roulette_wheel[index]
-                while(selector <= cumulative):
+                while (selector <= cumulative ) and (index != len(roulette_wheel)):
                     index += 1
                     cumulative += roulette_wheel[index]
 
@@ -682,12 +682,13 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 just_finished_training = True
             
         # 13. For each batch/generation, get the Kullback Liebler Coverage value
-        current_klc = KLC(pop)
-        klc_log.append(current_klc)
+        current_klc, sk_current_klc = KLC(pop)
+        klc_log[0].append(current_klc)
+        klc_log[1].append(sk_current_klc)
         repertoire_size.append(len(pop))
 
     plt.clf()
-    plt.plot(klc_log, label="KLC value per generation")
+    plt.plot(klc_log[0], label="KLC value per generation")
     plt.xlabel("Generation")
     plt.ylabel("Kullback-Liebler Divergence")
     title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
@@ -695,6 +696,16 @@ def AURORA_incremental_ballistic_task(with_rnn):
     save_name = "myplots/KLC"
     plt.savefig(save_name)
     np.save("inc_KLC.npy", klc_log)
+
+    plt.clf()
+    plt.plot(klc_log[1], label="KLC value per generation")
+    plt.xlabel("Generation")
+    plt.ylabel("Kullback-Liebler Divergence")
+    title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.title(title)
+    save_name = "myplots/sk_KLC"
+    plt.savefig(save_name)
+    np.save("inc_sk_KLC.npy", klc_log)
 
 
     plt.clf()
@@ -819,7 +830,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                 selector = random.uniform(0, 1)
                 index = 0
                 cumulative = roulette_wheel[index]
-                while(selector <= cumulative):
+                while (selector <= cumulative ) and (index != len(roulette_wheel)):
                     index += 1
                     cumulative += roulette_wheel[index]
 
