@@ -31,11 +31,14 @@ class AE(object):
         self.create_net(with_rnn)
 
         self.create_loss(with_rnn)
-        self.create_optimizer()
+        self.create_optimizer(with_rnn)
         self.saver = tf.train.Saver(tf.trainable_variables())
 
-    def create_optimizer(self):
-        self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, 250000, 0.9,name="learning_rate")
+    def create_optimizer(self, with_rnn):
+        if with_rnn == False:
+            self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, 250000, 0.9,name="learning_rate")
+        else:
+            self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, 300, 0.9,name="learning_rate")
         optimizer=tf.train.AdagradOptimizer(self.learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(self.loss))
         gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
@@ -48,8 +51,8 @@ class AE(object):
     #     gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
     #     self.optimizer.apply_gradients(zip(gradients, variables))
 
-    def create_net(self, add_rnn):
-        if add_rnn == False:
+    def create_net(self, with_rnn):
+        if with_rnn == False:
             self.layers=[self.x_image]
 
         else:

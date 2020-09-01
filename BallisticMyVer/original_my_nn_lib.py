@@ -251,7 +251,7 @@ class Conv2Dtranspose(object):
 class LSTM_layer(object):
     def __init__(self, input):
         #10^-3
-        self.key = 0.01
+        self.key = 0.025
         self.mult = int(1/self.key)
         self.n_input = 50
 

@@ -12,6 +12,10 @@ tf.disable_v2_behavior()
 
 import matplotlib.pyplot as plt
 
+from datetime import datetime
+
+now = datetime.now()
+
 POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
@@ -83,6 +87,8 @@ def split_dataset(pop_size):
     return t_v_list
 
 def train_ae(autoencoder, population, when_trained, with_rnn):
+    if with_rnn == True:
+        NUM_EPOCH = 300
     _max, _min = get_scaling_vars(population)
 
     t_loss_record = []
@@ -104,6 +110,8 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         ref_dataset = split_dataset(len(population))
 
         print("Beginning Training of Autoencoder")
+        current_time = now.strftime("%H:%M:%S")
+        print("Current Time =", current_time)
 
         for training_data, validation_data in ref_dataset:
             condition = True
@@ -117,7 +125,10 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                 t_loss = 0.0
                 v_loss = 0.0
 
-                if epoch % 250 == 0:
+                if (with_rnn == False) and (epoch % 250 == 0):
+                    print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
+
+                if (with_rnn == True) and (epoch % 3 == 0):
                     print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
 
                 # Actual training
@@ -177,6 +188,9 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         autoencoder.saver.save(session, "MY_MODEL")
 
     print("Training Complete")
+    current_time = now.strftime("%H:%M:%S")
+    print("Current Time =", current_time)
+
     plt.clf()
     plt.plot(t_loss_record, label="Training Loss")
     plt.plot(v_loss_record, label="Validation Loss")
@@ -542,6 +556,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
         if just_finished_training:
             print("Beginning QD iterations, next Autoencoder retraining at generation " + str(RETRAIN_ITER[network_activation]))
+            current_time = now.strftime("%H:%M:%S")
+            print("Current Time =", current_time)
             print("Reinitialising curiosity proportionate roulette wheel")
             roulette_wheel = make_wheel(pop)
 
@@ -617,6 +633,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
             if generation == RETRAIN_ITER[network_activation]:
 
                 print("Finished QD iterations")
+                current_time = now.strftime("%H:%M:%S")
+                print("Current Time =", current_time)
 
                 # 6. Retrain Autoencoder after a number of QD iterations
                 print("Training Autoencoder, this is training session: " + str(network_activation + 2) + "/" + str(len(RETRAIN_ITER) + 1))
