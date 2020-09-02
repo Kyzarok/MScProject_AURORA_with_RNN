@@ -21,12 +21,12 @@ class AE(object):
         self.global_step = tf.placeholder(tf.int32, shape=(), name="step_id")
         self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 
-        if with_rnn == False:
-            self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
-            self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
-        else:
-            self.x = tf.placeholder(tf.float32, [None, self.traj_length], name="rnn_input")
-            self.true_x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="real_x")
+        self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
+        self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
+
+        if with_rnn == True:
+            self.true_x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="true_x")
+            self.new_rnn_input = tf.placeholder(tf.float32, [None, self.traj_length], name="rnn_input")
 
         self.create_net(with_rnn)
 
@@ -52,15 +52,11 @@ class AE(object):
     #     self.optimizer.apply_gradients(zip(gradients, variables))
 
     def create_net(self, with_rnn):
-        if with_rnn == False:
-            self.layers=[self.x_image]
+        if with_rnn == True:
+            self.rnn_output_image = LSTM_layer(self.new_rnn_input).output()
+            print(self.rnn_output_image.shape)
 
-        else:
-            LSTM_out = LSTM_layer(self.x).output()
-            self.layers = [LSTM_out]
-            rnn_output_image = tf.reshape(self.layers[-1], [-1, 1, self.traj_length, 1])
-            self.layers.append(rnn_output_image)
-
+        self.layers=[self.x_image]
         with tf.variable_scope('encoder') as vs:
             self.create_encoder_conv([2])
             self.create_encoder_fc([5])
@@ -77,6 +73,7 @@ class AE(object):
             res=tf.reshape(self.layers[-1], [-1, self.traj_length*2], name = "reconstructed")
             self.layers.append(res)
             self.decoded  = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], 100, activation = 'identity', name = "decoded").output()
+
             self.layers.append(self.decoded)
 
     def create_loss(self, with_rnn):
@@ -125,3 +122,4 @@ class AE(object):
 
 
     # Added Network Control tools
+

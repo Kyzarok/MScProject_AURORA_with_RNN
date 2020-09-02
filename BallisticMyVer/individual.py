@@ -29,8 +29,8 @@ class indiv():
     self.curiosity_score = 0.0
 
 
-    self.key = 0.01
-    self.mult = int(1/self.key)
+    self.frac = 0.075
+    self.mult = int(2/self.frac)
   
   def set_bd(self, bd):
     self.bd = bd
@@ -71,19 +71,37 @@ class indiv():
     return trans.T
 
   def get_lstm_embed_traj(self):
-    a_mod = (self.mult * self.mult) + 1
-    b_mod = self.mult
+    a_mod = self.mult + 1
+    offset = 1
     ret = np.zeros((1, 50))
     for i in range(NB_STEP):
-      dim_0 = self.scaled_traj_image[0][i]
-      dim_1 = self.scaled_traj_image[0][i + NB_STEP]
-      a = round(dim_0 * self.mult) / self.mult
-      b = round(dim_1 * self.mult) / self.mult
+      dim_0 = offset + self.scaled_traj_image[0][i]
+      dim_1 = offset + self.scaled_traj_image[0][i + NB_STEP]
+      a = round(dim_0 / self.frac)
+      b = round(dim_1 / self.frac)
       a = a * a_mod
-      b = b * b_mod
-      ret[0][i] = a + b
-
+      this_a = int(a.copy())
+      this_b = int(b.copy())
+      # print(this_a, this_b)
+      ret[0][i] = int(this_a + this_b)
+    # print(ret)
     return ret
+
+  # def get_lstm_embed_traj(self):
+  #   offset = 1
+  #   ret = np.zeros((1, 50))
+  #   for i in range(NB_STEP):
+  #     dim_0 = offset + self.scaled_traj_image[0][i]
+  #     dim_1 = offset + self.scaled_traj_image[0][i + NB_STEP]
+  #     a = round(dim_0 / self.frac)
+  #     b = round(dim_1 / self.frac)
+  #     this_a = int(a.copy())
+  #     this_b = int(b.copy())
+  #     # print(this_a, this_b)
+  #     ret[0][i] = int(this_a * this_b)
+  #   # print(ret)
+  #   return ret
+
 
   def get_scaled_image(self, _max, _min):
     data = self.cart_traj
@@ -95,8 +113,6 @@ class indiv():
     res = [ r*2 - 1 for r in data]
 
     self.scaled_traj_image = self.get_traj_image(res)
-    
-
     return self.scaled_traj_image
 
   def get_traj_image(self, data):

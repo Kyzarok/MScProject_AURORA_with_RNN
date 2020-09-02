@@ -251,18 +251,22 @@ class Conv2Dtranspose(object):
 class LSTM_layer(object):
     def __init__(self, input):
         #10^-3
-        self.key = 0.025
-        self.mult = int(1/self.key)
+        self.frac = 0.0075
+        self.mult = int(2/self.frac)
         self.n_input = 50
 
-        self.vocab_size = ( (self.mult * self.mult) + self.mult ) + self.mult + 1
+        # Max possible size of a_mod * a + b
+        self.vocab_size = (self.mult * (self.mult + 1)) + self.mult
+        # self.vocab_size = self.mult * self.mult
+
+        # self.vocab_size = ( (self.mult * self.mult) + self.mult ) + self.mult + 1
 
         # number of units in RNN cell
-        self.n_hidden = 512 # STANDARD VALUE
+        self.n_hidden = 128 # STANDARD VALUE
 
         # RNN output node weights and biases
-        self.weights = {'out': tf.Variable(tf.random_normal([self.n_hidden, self.vocab_size]), trainable=True)}
-        self.biases = {'out': tf.Variable(tf.random_normal([self.vocab_size]), trainable=True)}
+        self.weights = tf.Variable(xavier_init([self.n_hidden, self.vocab_size]), trainable=True)
+        self.biases = tf.Variable(xavier_init([self.vocab_size]), trainable=True)
 
         # reshape to [1, n_input]
         input_x = tf.reshape(input, [-1, self.n_input])
@@ -277,7 +281,7 @@ class LSTM_layer(object):
         # generate prediction
         outputs, _ = tf.nn.static_rnn(self.rnn_cell, self.input_x, dtype=tf.float32)
         # there are n_input outputs but
-        self.true_outputs = tf.matmul(outputs, self.weights['out']) + self.biases['out']
+        self.true_outputs = tf.matmul(outputs, self.weights) + self.biases
 
         print("lstm")
         print(self.true_outputs.shape)

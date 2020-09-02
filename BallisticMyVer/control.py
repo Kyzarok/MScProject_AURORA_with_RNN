@@ -19,8 +19,8 @@ now = datetime.now()
 POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
-NUM_EPOCH = 25000
-# NUM_EPOCH = 1
+NUM_EPOCH = 300
+NUM_EPOCH = 50
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
@@ -40,6 +40,27 @@ FIT_MIN = 0.001
 FIT_MAX = 0.999
 
 CURIOSITY_OFFSET = 0.1
+
+FRAC = 0.0075
+
+def translate_image(image):
+    # print(image.shape)
+
+    decoded = np.zeros((1, 100))
+    mult = int(2/FRAC)
+    for i in range(50):
+        encoded = np.argmax(image[i])
+        # print(image[i])
+        a_count = 0
+        while encoded > mult:
+            encoded -= ( mult + 1 )
+            a_count += 1
+        x = a_count
+        y = encoded.copy()
+        decoded[0][i] = (x * FRAC) - 1
+        decoded[0][i + 50] = (y * FRAC) - 1
+
+    return decoded
 
 def get_scaling_vars(population):
     dims = population[0].get_traj().shape
@@ -87,8 +108,7 @@ def split_dataset(pop_size):
     return t_v_list
 
 def train_ae(autoencoder, population, when_trained, with_rnn):
-    if with_rnn == True:
-        NUM_EPOCH = 300
+
     _max, _min = get_scaling_vars(population)
 
     t_loss_record = []
@@ -110,8 +130,15 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         ref_dataset = split_dataset(len(population))
 
         print("Beginning Training of Autoencoder")
+        now = datetime.now()
         current_time = now.strftime("%H:%M:%S")
-        print("Current Time =", current_time)
+        print("Current Time =", current_time)            
+        
+        # check_state = 500
+        # if with_rnn == True:
+        check_state = 100
+
+        did_rnn_loop = False
 
         for training_data, validation_data in ref_dataset:
             condition = True
@@ -119,7 +146,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
             last_val_loss = 999999999999
 
             # This condition controls the training session
-            while(condition):
+            while (condition == True) and (did_rnn_loop == False):
                 
                 # Reset epoch losses
                 t_loss = 0.0
@@ -137,11 +164,22 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                     if with_rnn == True:
                         true_image = member.get_scaled_image(_max, _min)
                         rnn_image = member.get_lstm_embed_traj()
-                        _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        # print(rnn_image)
+                        # lat, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        # lat, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        rnn_output = session.run((autoencoder.rnn_output_image),\
+                             feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                        network_input_image = translate_image(rnn_output)
+                        _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), \
+                            feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        # if epoch % 10 == 0:  
+                        #     # print(rnn_image)  
+                        #     print(lat)
                         t_loss += np.mean(loss)
                     else:
                         image = member.get_scaled_image(_max, _min)
-                        _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), \
+                            feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
                         t_loss += np.mean(loss)
 
                 t_loss_record.append(t_loss)
@@ -152,8 +190,14 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                     member = population[v]
                     if with_rnn == True:
                         true_image = member.get_scaled_image(_max, _min)
-                        rnn_image = member.get_lstm_embed_traj()
-                        loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
+                        rnn_image = member.get_lstm_embed_traj() 
+                        rnn_output = session.run((autoencoder.rnn_output_image),\
+                             feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                        network_input_image = translate_image(rnn_output)
+                        loss = session.run((autoencoder.loss), \
+                            feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                        
+                        # loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
                         v_loss += np.mean(loss)
                     else:
                         image = member.get_scaled_image(_max, _min)
@@ -162,9 +206,9 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
 
                 v_loss_record.append(v_loss)
 
-                if len(v_loss_record) >= 500:
+                if (with_rnn == False) and (len(v_loss_record) >= check_state):
                     # Get the last 500 values of validation loss
-                    calc_avg_loss = v_loss_record[-500:]
+                    calc_avg_loss = v_loss_record[-check_state:]
                     # Calculate the average
                     calc_avg_loss = np.mean(calc_avg_loss)
 
@@ -178,6 +222,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
 
                 if (epoch == NUM_EPOCH):
                         condition = False
+                        did_rnn_loop = True
                 # Increase epoch counter
                 else:
                     epoch += 1
@@ -188,6 +233,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         autoencoder.saver.save(session, "MY_MODEL")
 
     print("Training Complete")
+    now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
     print("Current Time =", current_time)
 
@@ -229,15 +275,11 @@ def KLC(population):
 
     l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
     l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
+    # print(g_norm_0)
+    # print(g_norm_1)
+    # print(l_norm_0)
+    # print(l_norm_1)
 
-    D_KL_0 = mutual_info_score(g_norm_0, l_norm_0)
-    D_KL_1 = mutual_info_score(g_norm_1, l_norm_1)
-    sk_D_KL = (D_KL_0 + D_KL_1) / 2
-
-    D_KL_0 = 0.0
-    D_KL_1 = 0.0
-    e_i = 0.0
-    a_i = 0.0
     for i in range(nb_bins):
         # Case controlis necessary as these histograms exist to act as pseudo probability distributions
         # In histograms, a bin may have 0 values
@@ -245,27 +287,28 @@ def KLC(population):
         # So if any values are explicit 0s, we set them to a very small number to avoid log(0)
 
         if g_norm_0[i] == 0.0:
-            e_i = 0.00000001
-        else:
-            e_i = g_norm_0[i]
+            g_norm_0[i] = 0.00000001
 
         if l_norm_0[i] == 0.0:
-            a_i = 0.00000001
-        else:
-            a_i = l_norm_0[i]
-        D_KL_0 += e_i * math.log(e_i / a_i)
-
-
+            l_norm_0[i] = 0.00000001
+        
         if g_norm_1[i] == 0.0:
-            e_i = 0.00000001
-        else:
-            e_i = g_norm_1[i]
+            g_norm_1[i]= 0.00000001
 
         if l_norm_1[i] == 0.0:
-            a_i = 0.00000001
-        else:
-            a_i = l_norm_1[i]
-        D_KL_1 += e_i * math.log(e_i / a_i)
+            l_norm_1[i] = 0.00000001
+
+    D_KL_0 = mutual_info_score(g_norm_0, l_norm_0)
+    D_KL_1 = mutual_info_score(g_norm_1, l_norm_1)
+    sk_D_KL = (D_KL_0 + D_KL_1) / 2
+
+    D_KL_0 = 0.0
+    D_KL_1 = 0.0
+
+
+    for i in range(nb_bins):
+        D_KL_0 += g_norm_0[i] * math.log(g_norm_0[i]/l_norm_0[i])
+        D_KL_1 += g_norm_1[i] * math.log(g_norm_1[i]/l_norm_1[i])
 
     D_KL = (D_KL_0 + D_KL_1) / 2
     return D_KL, sk_D_KL
@@ -528,9 +571,15 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 latent_space.append(member_bd)
             else:
                 true_image = member.get_scaled_image(_max, _min)
-                rnn_image = member.get_lstm_embed_traj()
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                rnn_image = member.get_lstm_embed_traj()
+                rnn_output = sess.run((my_ae.rnn_output_image),\
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                network_input_image = translate_image(rnn_output)
+                member_bd = sess.run((my_ae.latent), \
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+
+                print(member_bd)
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
     
@@ -556,6 +605,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
         if just_finished_training:
             print("Beginning QD iterations, next Autoencoder retraining at generation " + str(RETRAIN_ITER[network_activation]))
+            now = datetime.now()
             current_time = now.strftime("%H:%M:%S")
             print("Current Time =", current_time)
             print("Reinitialising curiosity proportionate roulette wheel")
@@ -572,7 +622,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 selector = random.uniform(0, 1)
                 index = 0
                 cumulative = roulette_wheel[index]
-                while (selector <= cumulative ) and (index != len(roulette_wheel)):
+                while (selector <= cumulative ) and (index != len(roulette_wheel)-1):
                     index += 1
                     cumulative += roulette_wheel[index]
 
@@ -591,8 +641,11 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 else:
                     true_image = new_indiv.get_scaled_image(_max, _min)
                     rnn_image = new_indiv.get_lstm_embed_traj()
-                    # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                    rnn_output = sess.run((my_ae.rnn_output_image),\
+                            feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    network_input_image = translate_image(rnn_output)
+                    new_bd = sess.run((my_ae.latent), \
+                        feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
 
 
                 # image = new_indiv.get_scaled_image(_max, _min)
@@ -633,6 +686,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
             if generation == RETRAIN_ITER[network_activation]:
 
                 print("Finished QD iterations")
+                now = datetime.now()
                 current_time = now.strftime("%H:%M:%S")
                 print("Current Time =", current_time)
 
@@ -668,7 +722,11 @@ def AURORA_incremental_ballistic_task(with_rnn):
                         else:
                             true_image = member.get_scaled_image(_max, _min)
                             rnn_image = member.get_lstm_embed_traj()
-                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                            rnn_output = sess.run((my_ae.rnn_output_image),\
+                                    feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                            network_input_image = translate_image(rnn_output)
+                            member_bd = sess.run((my_ae.latent), \
+                                feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                             member.set_bd(member_bd)
                             latent_space.append(member_bd)
 
@@ -699,7 +757,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 network_activation += 1
                 just_finished_training = True
             
-        # 13. For each batch/generation, get the Kullback Liebler Coverage value
+        # 13. For each batch/generation, get the Kullback Lei
+        # bler Coverage value
         current_klc, sk_current_klc = KLC(pop)
         klc_log[0].append(current_klc)
         klc_log[1].append(sk_current_klc)
@@ -708,8 +767,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.clf()
     plt.plot(klc_log[0], label="KLC value per generation")
     plt.xlabel("Generation")
-    plt.ylabel("Kullback-Liebler Divergence")
-    title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.ylabel("Kullback-Leibler Divergence")
+    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
@@ -718,8 +777,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.clf()
     plt.plot(klc_log[1], label="KLC value per generation")
     plt.xlabel("Generation")
-    plt.ylabel("Kullback-Liebler Divergence")
-    title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.ylabel("Kullback-Leibler Divergence")
+    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/sk_KLC"
     plt.savefig(save_name)
@@ -897,7 +956,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                     pop[index].increase_curiosity()
                     roulette_wheel = make_wheel(pop)
             
-        # 6. For each batch/generation, get the Kullback Liebler Coverage value
+        # 6. For each batch/generation, get the Kullback Leibler Coverage value
         current_klc = KLC(pop)
         klc_log.append(current_klc)
         repertoire_size.append(len(pop))
@@ -905,8 +964,8 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.clf()
     plt.plot(klc_log, label="KLC value per generation")
     plt.xlabel("Generation")
-    plt.ylabel("Kullback-Liebler Divergence")
-    title = "Kullback-Liebler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.ylabel("Kullback-Leibler Divergence")
+    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
