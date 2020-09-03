@@ -20,7 +20,7 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 NUM_EPOCH = 300
-NUM_EPOCH = 50
+# NUM_EPOCH = 20
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
@@ -136,7 +136,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         
         # check_state = 500
         # if with_rnn == True:
-        check_state = 100
+        check_state = 50
 
         did_rnn_loop = False
 
@@ -206,7 +206,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
 
                 v_loss_record.append(v_loss)
 
-                if (with_rnn == False) and (len(v_loss_record) >= check_state):
+                if len(v_loss_record) >= check_state:
                     # Get the last 500 values of validation loss
                     calc_avg_loss = v_loss_record[-check_state:]
                     # Calculate the average
@@ -313,7 +313,7 @@ def KLC(population):
     D_KL = (D_KL_0 + D_KL_1) / 2
     return D_KL, sk_D_KL
 
-def calculate_novelty_threshold(latent_space):
+def calculate_novelty_threshold(latent_space, with_rnn):
 
     rows = len(latent_space)
     cols = len(latent_space[0][0])
@@ -340,6 +340,8 @@ def calculate_novelty_threshold(latent_space):
 
     #  arbitrary value to have a specific "resolution"
     K = 60000
+    if with_rnn == True:
+        K = 1000000
     
     new_novelty = maxdist/np.sqrt(K)
     return new_novelty
@@ -579,7 +581,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 member_bd = sess.run((my_ae.latent), \
                     feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
 
-                print(member_bd)
+                # print(member_bd)
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
     
@@ -588,6 +590,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
     # Calculate starting novelty threshold
     threshold = INITIAL_NOVLETY
+    # if with_rnn == True:
+    #     threshold = calculate_novelty_threshold(latent_space, with_rnn)
 
     # These are needed for the main algorithm
     network_activation = 0
@@ -622,10 +626,9 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 selector = random.uniform(0, 1)
                 index = 0
                 cumulative = roulette_wheel[index]
-                while (selector <= cumulative ) and (index != len(roulette_wheel)-1):
+                while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
                     index += 1
                     cumulative += roulette_wheel[index]
-
                 this_indiv = pop[index]
                 controller = this_indiv.get_key()
 
@@ -647,15 +650,14 @@ def AURORA_incremental_ballistic_task(with_rnn):
                     new_bd = sess.run((my_ae.latent), \
                         feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
 
-
                 # image = new_indiv.get_scaled_image(_max, _min)
                 # new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
-
                 # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
                 if dominated == -1:                           #    If the individual did not dominate another individual
+                    # print("no_domination")
                     if novelty >= threshold:                  #    If the individual is novel
                         new_indiv.set_bd(new_bd)
                         new_indiv.set_novelty(novelty)
@@ -689,6 +691,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 now = datetime.now()
                 current_time = now.strftime("%H:%M:%S")
                 print("Current Time =", current_time)
+                print("Current size of population is " + str(len(pop)))
 
                 # 6. Retrain Autoencoder after a number of QD iterations
                 print("Training Autoencoder, this is training session: " + str(network_activation + 2) + "/" + str(len(RETRAIN_ITER) + 1))
@@ -713,12 +716,13 @@ def AURORA_incremental_ballistic_task(with_rnn):
                         # member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
                         # member.set_bd(member_bd)
                         # latent_space.append(member_bd)
-
+                        this_bd = None
                         if with_rnn == False:
                             image = member.get_scaled_image(_max, _min)
                             member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-                            member.set_bd(member_bd)
-                            latent_space.append(member_bd)
+                            this_bd = member_bd.copy()
+                            # member.set_bd(member_bd)
+                            # latent_space.append(member_bd)
                         else:
                             true_image = member.get_scaled_image(_max, _min)
                             rnn_image = member.get_lstm_embed_traj()
@@ -727,11 +731,14 @@ def AURORA_incremental_ballistic_task(with_rnn):
                             network_input_image = translate_image(rnn_output)
                             member_bd = sess.run((my_ae.latent), \
                                 feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                            member.set_bd(member_bd)
-                            latent_space.append(member_bd)
+                            this_bd = member_bd.copy()
+                            # print(this_bd)
+
+                        member.set_bd(this_bd)
+                        latent_space.append(this_bd)
 
                 # 9. Calculate new novelty threshold to ensure population size less than 10000
-                threshold = calculate_novelty_threshold(latent_space)
+                threshold = calculate_novelty_threshold(latent_space, with_rnn)
                 print("New novelty threshold is " + str(threshold))
 
                 # 10. Update population so that only members with novel bds are allowed
@@ -740,8 +747,11 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 for member in pop:
                     this_bd = member.get_bd()
                     novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
+                    # print(novelty, this_bd)
                     if dominated == -1:                           #    If the individual did not dominate another individual
+                        # print("no domination")
                         if novelty >= threshold:                  #    If the individual is novel
+                            # print("added")
                             member.set_novelty(novelty)
                             new_pop.append(member)
                     else:                                         #    If the individual dominated another individual
@@ -749,6 +759,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                         new_pop[dominated] = member
 
                 pop = new_pop
+                print("After re-training, size of population is " + str(len(pop)))
 
                 # 11. Get current Latent Space and Ground Truth plots
                 plot_latent_gt(pop, generation)
