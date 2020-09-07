@@ -250,16 +250,13 @@ class Conv2Dtranspose(object):
 
 class LSTM_layer(object):
     def __init__(self, input):
-        #10^-3
+        # 10^-3
         self.frac = 0.0075
         self.mult = int(2/self.frac)
         self.n_input = 50
 
         # Max possible size of a_mod * a + b
         self.vocab_size = (self.mult * (self.mult + 1)) + self.mult
-        # self.vocab_size = self.mult * self.mult
-
-        # self.vocab_size = ( (self.mult * self.mult) + self.mult ) + self.mult + 1
 
         # number of units in RNN cell
         self.n_hidden = 128 # STANDARD VALUE

@@ -20,14 +20,19 @@ POPULATION_INITIAL_SIZE = 200
 POPULATION_LIMIT = 10000
 
 NUM_EPOCH = 300
-# NUM_EPOCH = 20
 BATCH_SIZE = 20000
 
 RETRAIN_ITER = [50, 150, 350, 750, 1550, 3150]
+
 NB_QD_ITERATIONS = 200
 NB_QD_BATCHES = 5000
-# NB_QD_ITERATIONS = 10
-# NB_QD_BATCHES = 50
+
+
+# Params much lower for testing purposes
+# NB_QD_BATCHES = 40
+# RETRAIN_ITER = [10, 20, 30]
+# POPULATION_INITIAL_SIZE = 20
+# NUM_EPOCH = 3
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -39,7 +44,7 @@ INITIAL_NOVLETY = 0.01
 FIT_MIN = 0.001
 FIT_MAX = 0.999
 
-CURIOSITY_OFFSET = 0.1
+CURIOSITY_OFFSET = 0.01
 
 FRAC = 0.0075
 
@@ -134,11 +139,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         current_time = now.strftime("%H:%M:%S")
         print("Current Time =", current_time)            
         
-        # check_state = 500
-        # if with_rnn == True:
         check_state = 50
-
-        did_rnn_loop = False
 
         for training_data, validation_data in ref_dataset:
             condition = True
@@ -146,17 +147,14 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
             last_val_loss = 999999999999
 
             # This condition controls the training session
-            while (condition == True) and (did_rnn_loop == False):
+            while (condition == True):
                 
                 # Reset epoch losses
                 t_loss = 0.0
                 v_loss = 0.0
 
-                if (with_rnn == False) and (epoch % 250 == 0):
-                    print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
-
-                if (with_rnn == True) and (epoch % 3 == 0):
-                    print("At training epoch " + str(epoch) + ", we're " + str(epoch/NUM_EPOCH * 100) + "% of the way there!")
+                if (epoch % 3 == 0):
+                    print("At training epoch " + str(epoch) + ", we're " + str(int(epoch/NUM_EPOCH * 100)) + "% of the way there!")
 
                 # Actual training
                 for t in training_data:
@@ -164,17 +162,11 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                     if with_rnn == True:
                         true_image = member.get_scaled_image(_max, _min)
                         rnn_image = member.get_lstm_embed_traj()
-                        # print(rnn_image)
-                        # lat, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                        # lat, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), feed_dict={autoencoder.x : rnn_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
                         rnn_output = session.run((autoencoder.rnn_output_image),\
                              feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
                         network_input_image = translate_image(rnn_output)
                         _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), \
                             feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
-                        # if epoch % 10 == 0:  
-                        #     # print(rnn_image)  
-                        #     print(lat)
                         t_loss += np.mean(loss)
                     else:
                         image = member.get_scaled_image(_max, _min)
@@ -197,11 +189,10 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                         loss = session.run((autoencoder.loss), \
                             feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
                         
-                        # loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
                         v_loss += np.mean(loss)
                     else:
                         image = member.get_scaled_image(_max, _min)
-                        loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 25000})
+                        loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
                         v_loss += np.mean(loss)
 
                 v_loss_record.append(v_loss)
@@ -222,7 +213,6 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
 
                 if (epoch == NUM_EPOCH):
                         condition = False
-                        did_rnn_loop = True
                 # Increase epoch counter
                 else:
                     epoch += 1
@@ -275,10 +265,6 @@ def KLC(population):
 
     l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
     l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
-    # print(g_norm_0)
-    # print(g_norm_1)
-    # print(l_norm_0)
-    # print(l_norm_1)
 
     for i in range(nb_bins):
         # Case controlis necessary as these histograms exist to act as pseudo probability distributions
@@ -340,8 +326,8 @@ def calculate_novelty_threshold(latent_space, with_rnn):
 
     #  arbitrary value to have a specific "resolution"
     K = 60000
-    if with_rnn == True:
-        K = 1000000
+    # if with_rnn == True:
+    #     K = 1000000
     
     new_novelty = maxdist/np.sqrt(K)
     return new_novelty
@@ -534,21 +520,6 @@ def AURORA_incremental_ballistic_task(with_rnn):
         member.eval(genotype)
     print("Complete")
 
-    # this_one = np.array(pop[0].cart_traj)
-    # cell = tf.nn.rnn_cell.LSTMCell(num_units = 2)
-    # print('Should be here')
-    # print(cell.state_size)
-    # this_traj = np.zeros((50, 2, 1))
-    # for i in range(50):
-    #     this_traj[i][0] = this_one[i][0]
-    #     this_traj[i][1] = this_one[i][1]
-    # h_prev = cell.__call__(this_traj[0], state=[1, [0, 0]])
-    # for i in range(1, 50):
-    #     h_next = cell.__call__(this_traj[i], state=[ 1, [ h_prev[0], h_prev[1] ] ] )
-    #     print(h_next)
-    #     h_prev = h_next
-    # print(cell.get_weights())
-
     # Create the dimension reduction algorithm (the Autoencoder)
     print("Creating network, printing autoencoder layers")
     my_ae = AE(with_rnn)
@@ -568,7 +539,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
             else:
@@ -580,8 +551,6 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 network_input_image = translate_image(rnn_output)
                 member_bd = sess.run((my_ae.latent), \
                     feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-
-                # print(member_bd)
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
     
@@ -595,34 +564,46 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
     # These are needed for the main algorithm
     network_activation = 0
-    klc_log = [[], []] # Record my ver and the sklearn ver
+    klc_log = [[], []]                              # Record my ver and the sklearn ver
     just_finished_training = True
     roulette_wheel = []
     repertoire_size = []
     big_error_log = [ [] for i in range(2) ]
     big_error_log[0] = t_error
     big_error_log[1] = v_error
+
+    rmse_log = []
+
+    last_run = False
     
     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
     for generation in range(NB_QD_BATCHES):
         _max, _min = get_scaling_vars(pop)
-
         if just_finished_training:
             print("Beginning QD iterations, next Autoencoder retraining at generation " + str(RETRAIN_ITER[network_activation]))
             now = datetime.now()
             current_time = now.strftime("%H:%M:%S")
             print("Current Time =", current_time)
             print("Reinitialising curiosity proportionate roulette wheel")
-            roulette_wheel = make_wheel(pop)
+        if last_run:
+            print("Beginning QD iterations, no more Autoencoder training")
+            now = datetime.now()
+            current_time = now.strftime("%H:%M:%S")
+            print("Current Time =", current_time)
+            print("Reinitialising curiosity proportionate roulette wheel")
+            last_run = False
+
+
+        roulette_wheel = make_wheel(pop)
 
         # Begin Quality Diversity iterations
         with tf.Session() as sess:
             my_ae.saver.restore(sess, "MY_MODEL")
             print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
-
+            gen_rmse_log = []
             for j in range(NB_QD_ITERATIONS):
 
-                # 1. Select controller from population using curiosity proportionate selection
+                # 1. Select controller from population using curiosity proportionate selection ( AKA Spin wheel! )
                 selector = random.uniform(0, 1)
                 index = 0
                 cumulative = roulette_wheel[index]
@@ -636,22 +617,24 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 new_indiv = mut_eval(controller)
 
                 new_bd = None
+                out = None
+                image = None
 
                 # 3. Get the Behavioural Descriptor for the new individual
                 if with_rnn == False:
                     image = new_indiv.get_scaled_image(_max, _min)
-                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 else:
                     true_image = new_indiv.get_scaled_image(_max, _min)
                     rnn_image = new_indiv.get_lstm_embed_traj()
                     rnn_output = sess.run((my_ae.rnn_output_image),\
                             feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                     network_input_image = translate_image(rnn_output)
-                    new_bd = sess.run((my_ae.latent), \
+                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
                         feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    image = true_image
 
-                # image = new_indiv.get_scaled_image(_max, _min)
-                # new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
@@ -663,28 +646,25 @@ def AURORA_incremental_ballistic_task(with_rnn):
                         new_indiv.set_novelty(novelty)
                         pop.append(new_indiv)
 
-                        # Increase curiosity score of individual and modify wheel
+                        # Increase curiosity score of individual
                         pop[index].increase_curiosity()
-                        roulette_wheel = make_wheel(pop)
 
                     else:                                    #    If the individual is NOT novel
-                        # Decrease curiosity score of individual and modify wheel 
+                        # Decrease curiosity score of individual
                         pop[index].decrease_curiosity()
-                        roulette_wheel = make_wheel(pop)
                 else:                                         #    If the individual dominated another individual
                     new_indiv.set_bd(new_bd)
                     new_indiv.set_novelty(novelty)
                     pop[dominated] = new_indiv
 
-                    # Increase curiosity score of individual and modify wheel
+                    # Increase curiosity score of individual
                     pop[index].increase_curiosity()
-                    roulette_wheel = make_wheel(pop)
 
 
         just_finished_training = False
 
         # Check if this generation is before the last retraining session
-        if generation <= RETRAIN_ITER[-1]:
+        if network_activation < len(RETRAIN_ITER):
             if generation == RETRAIN_ITER[network_activation]:
 
                 print("Finished QD iterations")
@@ -712,17 +692,11 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 with tf.Session() as sess:
                     my_ae.saver.restore(sess, "MY_MODEL")
                     for member in pop:
-                        # image = member.get_scaled_image(_max, _min)
-                        # member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
-                        # member.set_bd(member_bd)
-                        # latent_space.append(member_bd)
                         this_bd = None
                         if with_rnn == False:
                             image = member.get_scaled_image(_max, _min)
-                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                             this_bd = member_bd.copy()
-                            # member.set_bd(member_bd)
-                            # latent_space.append(member_bd)
                         else:
                             true_image = member.get_scaled_image(_max, _min)
                             rnn_image = member.get_lstm_embed_traj()
@@ -732,7 +706,6 @@ def AURORA_incremental_ballistic_task(with_rnn):
                             member_bd = sess.run((my_ae.latent), \
                                 feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                             this_bd = member_bd.copy()
-                            # print(this_bd)
 
                         member.set_bd(this_bd)
                         latent_space.append(this_bd)
@@ -747,11 +720,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 for member in pop:
                     this_bd = member.get_bd()
                     novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
-                    # print(novelty, this_bd)
                     if dominated == -1:                           #    If the individual did not dominate another individual
-                        # print("no domination")
                         if novelty >= threshold:                  #    If the individual is novel
-                            # print("added")
                             member.set_novelty(novelty)
                             new_pop.append(member)
                     else:                                         #    If the individual dominated another individual
@@ -766,14 +736,17 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
                 # 12. Prepare to check next retrain period
                 network_activation += 1
-                just_finished_training = True
+                if network_activation == len(RETRAIN_ITER):
+                    last_run = True
+                else:
+                    just_finished_training = True
             
-        # 13. For each batch/generation, get the Kullback Lei
-        # bler Coverage value
+        # 13. For each batch/generation, get the Kullback Leibler Coverage value
         current_klc, sk_current_klc = KLC(pop)
         klc_log[0].append(current_klc)
         klc_log[1].append(sk_current_klc)
         repertoire_size.append(len(pop))
+        rmse_log.append(np.mean(gen_rmse_log))
 
     plt.clf()
     plt.plot(klc_log[0], label="KLC value per generation")
@@ -783,7 +756,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
-    np.save("inc_KLC.npy", klc_log)
+    np.save("mydata/inc_KLC.npy", klc_log)
 
     plt.clf()
     plt.plot(klc_log[1], label="KLC value per generation")
@@ -793,8 +766,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/sk_KLC"
     plt.savefig(save_name)
-    np.save("inc_sk_KLC.npy", klc_log)
-
+    np.save("mydata/inc_sk_KLC.npy", klc_log)
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -804,7 +776,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/RepSize"
     plt.savefig(save_name)
-    np.save("inc_rep_size.npy", repertoire_size)
+    np.save("mydata/inc_rep_size.npy", repertoire_size)
     
     plot_latent_gt(pop, -1)
 
@@ -818,7 +790,17 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/Full_loss_plot"
     plt.savefig(save_name)
-    np.save("inc_error_log.npy", big_error_log)
+    np.save("mydata/inc_error_log.npy", big_error_log)
+
+    plt.clf()
+    plt.plot(rmse_log)
+    plt.xlabel("Generation")
+    plt.ylabel("RMSE Loss")
+    title = "Average Root Mean Squared Error per Generation"
+    plt.title(title)
+    save_name = "myplots/rmse_plot"
+    plt.savefig(save_name)
+    np.save("mydata/rmse.npy", big_error_log)
     
 
 # The only difference between the other basic ballistic task is that this is only trained once and with more samples    
@@ -876,14 +858,14 @@ def AURORA_pretrained_ballistic_task(with_rnn):
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 rnn_image = member.get_lstm_embed_traj()
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 member.set_bd(member_bd)
                 latent_space.append(member_bd)
     
@@ -933,12 +915,12 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                 # 3. Get the Behavioural Descriptor for the new individual
                 if with_rnn == False:
                     image = new_indiv.get_scaled_image(_max, _min)
-                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 else:
                     true_image = new_indiv.get_scaled_image(_max, _min)
                     rnn_image = new_indiv.get_lstm_embed_traj()
                     # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 25000})
+                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
@@ -980,7 +962,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
-    np.save("pre_KLC.npy", klc_log)
+    np.save("mydata/pre_KLC.npy", klc_log)
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -990,7 +972,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/RepSize"
     plt.savefig(save_name)
-    np.save("pre_KLC.npy", klc_log)
+    np.save("mydata/pre_KLC.npy", klc_log)
     
     plot_latent_gt(pop, -1)
 
@@ -1004,7 +986,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/Full_loss_plot"
     plt.savefig(save_name)
-    np.save("pre_error_log.npy", big_error_log)   
+    np.save("mydata/pre_error_log.npy", big_error_log)   
 
  
 
