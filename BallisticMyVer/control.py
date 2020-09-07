@@ -29,16 +29,16 @@ NB_QD_BATCHES = 5000
 
 
 # Params much lower for testing purposes
-# NB_QD_BATCHES = 40
-# RETRAIN_ITER = [10, 20, 30]
-# POPULATION_INITIAL_SIZE = 20
-# NUM_EPOCH = 3
+NB_QD_BATCHES = 40
+RETRAIN_ITER = [10, 20, 30]
+POPULATION_INITIAL_SIZE = 20
+NUM_EPOCH = 3
 
 MUTATION_RATE = 0.1
 ETA = 10
 EPSILON = 0.1
 
-K_NEAREST_NEIGHBOURS = 15
+K_NEAREST_NEIGHBOURS = 2
 INITIAL_NOVLETY = 0.01
 
 FIT_MIN = 0.001
@@ -140,11 +140,17 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         print("Current Time =", current_time)            
         
         check_state = 50
+        total_epochs = 0
+
+        condition = True
+        epoch = 0
+        last_val_loss = 999999999999
 
         for training_data, validation_data in ref_dataset:
-            condition = True
-            epoch = 0
-            last_val_loss = 999999999999
+            if total_epochs <= 600:
+                condition = True
+                epoch = 0
+                last_val_loss = 999999999999
 
             # This condition controls the training session
             while (condition == True):
@@ -216,8 +222,7 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
                 # Increase epoch counter
                 else:
                     epoch += 1
-
-
+                    total_epochs += 1
 
         # Save the current autoencoder
         autoencoder.saver.save(session, "MY_MODEL")
@@ -332,6 +337,29 @@ def calculate_novelty_threshold(latent_space, with_rnn):
     new_novelty = maxdist/np.sqrt(K)
     return new_novelty
 
+def make_novelty_params(population):
+
+    rows = len(population)
+    cols = 2
+    X = np.zeros((rows, cols))
+    for member in population:
+        this_bd = member.get_bd()
+        X[i][0] = this_bd[0]
+        X[i][1] = this_bd[1]
+
+    x_squared = np.zeros((rows, 1))
+    two_x = np.zeros((rows, 1))
+    y_squared = np.zeros((rows, 1))
+    two_y = np.zeros(rows, 1)
+
+    for i in range(rows):
+        x_squared[i] = X[i][0]**2
+        two_x[i] = 2 * X[i][0]
+        y_squared[i] = X[i][1]**2
+        two_y[i] = 2 * X[i][1]
+
+    return x_squared, two_x, y_squared, two_y
+
 
 def mut_eval(indiv_params):
     # Implements polynomial mutation
@@ -353,7 +381,7 @@ def mut_eval(indiv_params):
     new_indiv.eval(new_params)
     return new_indiv
 
-def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novelty):
+def grow_pop_does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novelty):
     dominated_indiv = -1
     x_1_novelty = init_novelty
     # If novelty threshold is greater than the nearest neighbour but less than the second nearest neighbour
@@ -362,7 +390,7 @@ def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novel
         pop_without_x_2 = population.copy()
         del pop_without_x_2[k_n_n[0]]
         x_1_novelty = dist_from_k_n_n[1]
-        x_2_novelty, _ = calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
+        x_2_novelty, _ = grow_pop_calculate_novelty(population[k_n_n[0]].get_bd(), pop_without_x_2, curr_threshold, False)
 
         # Find if exclusive epsilon dominance is met according to Cully QD Framework
         # First Condition
@@ -387,7 +415,7 @@ def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novel
     return dominated_indiv, x_1_novelty
 
     
-def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
+def grow_pop_calculate_novelty(this_bd, population, curr_threshold, check_dominate):
     # If the population is still too small
     if len(population) < K_NEAREST_NEIGHBOURS:
         novelty = 99999
@@ -418,9 +446,67 @@ def calculate_novelty(this_bd, population, curr_threshold, check_dominate):
         dominated_indiv = -1
 
         if check_dominate:
-            dominated_indiv, novelty = does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, novelty)
+            dominated_indiv, novelty = grow_pop_does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, novelty)
 
         return novelty, dominated_indiv
+
+def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, x_squared, two_x, y_squared, two_y, population):
+    dominated_indiv = -1
+    x_1_novelty = dist_from_k_n_n[0]
+    # If novelty threshold is greater than the nearest neighbour but less than the second nearest neighbour
+    if (curr_threshold > dist_from_k_n_n[0]) and (curr_threshold < dist_from_k_n_n[1]):
+        x_1_novelty = dist_from_k_n_n[1]
+        x_2_novelty, _ = calculate_novelty(population[k_n_n[0]].get_bd(), curr_threshold, False, x_squared, two_x, y_squared, two_y, population)
+
+        # Find if exclusive epsilon dominance is met according to Cully QD Framework
+        # First Condition
+        if x_1_novelty >= (1 - EPSILON) * x_2_novelty:
+            # The Second Condition measures Quality, i.e. a fitness function
+            # In AURORA this does not exist as having such a defeats the purpose of autonomous discovery
+            # I have included because why the hell not
+            # if Q(new_indiv) >= (1 - ETA) * Q(nearest_neighbour)
+
+            # The Third Condition is another bound that measures the combination of Novelty and Quality
+            #             Quality
+            #               |      .
+            #               |      .    Idea is that this area 
+            #               |      .    dominates
+            #               |      ........
+            #               |
+            #               |
+            #                -------------- Novelty
+
+            dominated_indiv = k_n_n[0]
+
+    return dominated_indiv, x_1_novelty
+
+def calculate_novelty(this_bd, curr_threshold, check_dominate, x_squared, two_x, y_squared, two_y, population):
+    two_x_new_x = two_x * this_bd[0]
+    two_y_new_y = two_y * this_bd[1]
+    size = len(x_squared)
+    new_x_squared = np.full((size, 1), this_bd[0]**2)
+    new_y_squared = np.full((size, 1), this_bd[1]**2)
+
+    distances = x_squared - two_x_new_x + new_x_squared + y_squared - two_y_new_y + new_y_squared
+
+    min_dist = np.sqrt(np.min(distances))
+    nn = np.argmin(distances)
+
+    distances[nn] = 99999999
+
+    second_min_dist = np.sqrt(np.min(distances))
+    second_nn = np.argmin(distances)
+
+    novelty = min_dist
+
+    dominated_indiv = -1
+
+    if check_dominate:
+        dominated_indiv, novelty = does_dominate(curr_threshold, [nn, second_nn], [min_dist, second_min_dist], x_squared, two_x, y_squared, two_y, population)
+    else:
+        novelty = second_min_dist
+
+    return novelty, dominated_indiv
 
 def plot_latent_gt(population, when_trained):
     l_x = []
@@ -595,6 +681,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
 
         roulette_wheel = make_wheel(pop)
+        x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
 
         # Begin Quality Diversity iterations
         with tf.Session() as sess:
@@ -637,7 +724,9 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
 
                 # 4. See if the new Behavioural Descriptor is novel enough
-                novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
+                # novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
+
+                novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
                 # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
                 if dominated == -1:                           #    If the individual did not dominate another individual
                     # print("no_domination")
@@ -719,7 +808,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 new_pop = []
                 for member in pop:
                     this_bd = member.get_bd()
-                    novelty, dominated = calculate_novelty(this_bd, new_pop, threshold, True)
+                    novelty, dominated = grow_pop_calculate_novelty(this_bd, new_pop, threshold, True)
                     if dominated == -1:                           #    If the individual did not dominate another individual
                         if novelty >= threshold:                  #    If the individual is novel
                             member.set_novelty(novelty)
@@ -798,9 +887,9 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.ylabel("RMSE Loss")
     title = "Average Root Mean Squared Error per Generation"
     plt.title(title)
-    save_name = "myplots/rmse_plot"
+    save_name = "myplots/inc_rmse_plot"
     plt.savefig(save_name)
-    np.save("mydata/rmse.npy", big_error_log)
+    np.save("mydata/inc_rmse.npy", big_error_log)
     
 
 # The only difference between the other basic ballistic task is that this is only trained once and with more samples    
@@ -957,9 +1046,6 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                     # Increase curiosity score of individual and modify wheel
                     pop[index].increase_curiosity()
             
-
-
-            
         # 6. For each batch/generation, record various metrics
         current_klc, sk_current_klc = KLC(pop)
         klc_log[0].append(current_klc)
@@ -1000,7 +1086,18 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/Full_loss_plot"
     plt.savefig(save_name)
-    np.save("mydata/pre_error_log.npy", big_error_log)   
+    np.save("mydata/pre_error_log.npy", big_error_log)  
+
+    
+    plt.clf()
+    plt.plot(rmse_log)
+    plt.xlabel("Generation")
+    plt.ylabel("RMSE Loss")
+    title = "Average Root Mean Squared Error per Generation"
+    plt.title(title)
+    save_name = "myplots/pre_rmse_plot"
+    plt.savefig(save_name)
+    np.save("mydata/pre_rmse.npy", big_error_log) 
 
  
 

@@ -82,25 +82,9 @@ class indiv():
       a = a * a_mod
       this_a = int(a.copy())
       this_b = int(b.copy())
-      # print(this_a, this_b)
       ret[0][i] = int(this_a + this_b)
-    # print(ret)
     return ret
 
-  # def get_lstm_embed_traj(self):
-  #   offset = 1
-  #   ret = np.zeros((1, 50))
-  #   for i in range(NB_STEP):
-  #     dim_0 = offset + self.scaled_traj_image[0][i]
-  #     dim_1 = offset + self.scaled_traj_image[0][i + NB_STEP]
-  #     a = round(dim_0 / self.frac)
-  #     b = round(dim_1 / self.frac)
-  #     this_a = int(a.copy())
-  #     this_b = int(b.copy())
-  #     # print(this_a, this_b)
-  #     ret[0][i] = int(this_a * this_b)
-  #   # print(ret)
-  #   return ret
 
 
   def get_scaled_image(self, _max, _min):
