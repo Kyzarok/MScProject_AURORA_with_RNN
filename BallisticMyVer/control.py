@@ -29,10 +29,10 @@ NB_QD_BATCHES = 5000
 
 
 # Params much lower for testing purposes
-NB_QD_BATCHES = 40
-RETRAIN_ITER = [10, 20, 30]
-POPULATION_INITIAL_SIZE = 20
-NUM_EPOCH = 3
+# NB_QD_BATCHES = 40
+# RETRAIN_ITER = [10, 20, 30]
+# POPULATION_INITIAL_SIZE = 20
+# NUM_EPOCH = 3
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -342,15 +342,15 @@ def make_novelty_params(population):
     rows = len(population)
     cols = 2
     X = np.zeros((rows, cols))
-    for member in population:
-        this_bd = member.get_bd()
+    for i in range(rows):
+        this_bd = population[i].get_bd()[0]
         X[i][0] = this_bd[0]
         X[i][1] = this_bd[1]
 
     x_squared = np.zeros((rows, 1))
     two_x = np.zeros((rows, 1))
     y_squared = np.zeros((rows, 1))
-    two_y = np.zeros(rows, 1)
+    two_y = np.zeros((rows, 1))
 
     for i in range(rows):
         x_squared[i] = X[i][0]**2
@@ -453,49 +453,31 @@ def grow_pop_calculate_novelty(this_bd, population, curr_threshold, check_domina
 def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, x_squared, two_x, y_squared, two_y, population):
     dominated_indiv = -1
     x_1_novelty = dist_from_k_n_n[0]
-    # If novelty threshold is greater than the nearest neighbour but less than the second nearest neighbour
     if (curr_threshold > dist_from_k_n_n[0]) and (curr_threshold < dist_from_k_n_n[1]):
         x_1_novelty = dist_from_k_n_n[1]
         x_2_novelty, _ = calculate_novelty(population[k_n_n[0]].get_bd(), curr_threshold, False, x_squared, two_x, y_squared, two_y, population)
-
-        # Find if exclusive epsilon dominance is met according to Cully QD Framework
-        # First Condition
         if x_1_novelty >= (1 - EPSILON) * x_2_novelty:
-            # The Second Condition measures Quality, i.e. a fitness function
-            # In AURORA this does not exist as having such a defeats the purpose of autonomous discovery
-            # I have included because why the hell not
-            # if Q(new_indiv) >= (1 - ETA) * Q(nearest_neighbour)
-
-            # The Third Condition is another bound that measures the combination of Novelty and Quality
-            #             Quality
-            #               |      .
-            #               |      .    Idea is that this area 
-            #               |      .    dominates
-            #               |      ........
-            #               |
-            #               |
-            #                -------------- Novelty
-
             dominated_indiv = k_n_n[0]
 
     return dominated_indiv, x_1_novelty
 
 def calculate_novelty(this_bd, curr_threshold, check_dominate, x_squared, two_x, y_squared, two_y, population):
+    this_bd = this_bd[0]
     two_x_new_x = two_x * this_bd[0]
     two_y_new_y = two_y * this_bd[1]
     size = len(x_squared)
     new_x_squared = np.full((size, 1), this_bd[0]**2)
     new_y_squared = np.full((size, 1), this_bd[1]**2)
 
-    distances = x_squared - two_x_new_x + new_x_squared + y_squared - two_y_new_y + new_y_squared
+    sq_distances = x_squared - two_x_new_x + new_x_squared + y_squared - two_y_new_y + new_y_squared
 
-    min_dist = np.sqrt(np.min(distances))
-    nn = np.argmin(distances)
+    min_dist = np.sqrt(np.min(sq_distances))
+    nn = np.argmin(sq_distances)
 
-    distances[nn] = 99999999
+    sq_distances[nn] = 99999999
 
-    second_min_dist = np.sqrt(np.min(distances))
-    second_nn = np.argmin(distances)
+    second_min_dist = np.sqrt(np.min(sq_distances))
+    second_nn = np.argmin(sq_distances)
 
     novelty = min_dist
 
