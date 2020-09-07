@@ -741,7 +741,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 else:
                     just_finished_training = True
             
-        # 13. For each batch/generation, get the Kullback Leibler Coverage value
+        # 13. For each batch/generation, record various metrics
         current_klc, sk_current_klc = KLC(pop)
         klc_log[0].append(current_klc)
         klc_log[1].append(sk_current_klc)
@@ -876,12 +876,13 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     threshold = INITIAL_NOVLETY
 
     # These are needed for the main algorithm
-    klc_log = []
+    klc_log = [[], []]                              # Record my ver and the sklearn ver
     roulette_wheel = []
     repertoire_size = []
     big_error_log = [ [] for i in range(2) ]
     big_error_log[0] = t_error
     big_error_log[1] = v_error
+    rmse_log = []
     
     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
     for generation in range(NB_QD_BATCHES):
@@ -891,6 +892,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
 
         # Begin Quality Diversity iterations
         with tf.Session() as sess:
+            gen_rmse_log = []
             my_ae.saver.restore(sess, "MY_MODEL")
             print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
 
@@ -900,27 +902,36 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                 selector = random.uniform(0, 1)
                 index = 0
                 cumulative = roulette_wheel[index]
-                while (selector <= cumulative ) and (index != len(roulette_wheel)):
+                while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
                     index += 1
                     cumulative += roulette_wheel[index]
-
                 this_indiv = pop[index]
+
                 controller = this_indiv.get_key()
 
                 # 2. Mutate and evaluate the chosen controller
                 new_indiv = mut_eval(controller)
 
                 new_bd = None
+                out = None
+                image = None
 
                 # 3. Get the Behavioural Descriptor for the new individual
                 if with_rnn == False:
                     image = new_indiv.get_scaled_image(_max, _min)
-                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 else:
                     true_image = new_indiv.get_scaled_image(_max, _min)
                     rnn_image = new_indiv.get_lstm_embed_traj()
-                    # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                    new_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    rnn_output = sess.run((my_ae.rnn_output_image),\
+                            feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    network_input_image = translate_image(rnn_output)
+                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
+                        feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    image = true_image
+
+                gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
+
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
@@ -934,12 +945,10 @@ def AURORA_pretrained_ballistic_task(with_rnn):
 
                         # Increase curiosity score of individual and modify wheel
                         pop[index].increase_curiosity()
-                        roulette_wheel = make_wheel(pop)
 
                     else:                                    #    If the individual is NOT novel
                         # Decrease curiosity score of individual and modify wheel 
                         pop[index].decrease_curiosity()
-                        roulette_wheel = make_wheel(pop)
                 else:                                         #    If the individual dominated another individual
                     new_indiv.set_bd(new_bd)
                     new_indiv.set_novelty(novelty)
@@ -947,12 +956,17 @@ def AURORA_pretrained_ballistic_task(with_rnn):
 
                     # Increase curiosity score of individual and modify wheel
                     pop[index].increase_curiosity()
-                    roulette_wheel = make_wheel(pop)
             
-        # 6. For each batch/generation, get the Kullback Leibler Coverage value
-        current_klc = KLC(pop)
-        klc_log.append(current_klc)
+
+
+            
+        # 6. For each batch/generation, record various metrics
+        current_klc, sk_current_klc = KLC(pop)
+        klc_log[0].append(current_klc)
+        klc_log[1].append(sk_current_klc)
         repertoire_size.append(len(pop))
+        rmse_log.append(np.mean(gen_rmse_log))
+
 
     plt.clf()
     plt.plot(klc_log, label="KLC value per generation")
