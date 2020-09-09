@@ -311,20 +311,19 @@ def KLC(population, true_gt):
         if l_norm_1[i] == 0.0:
             l_norm_1[i] = 0.00000001
 
-    D_KL_0 = mutual_info_score(g_norm_0, l_norm_0)
-    D_KL_1 = mutual_info_score(g_norm_1, l_norm_1)
-    sk_D_KL = (D_KL_0 + D_KL_1) / 2
+    # D_KL_0 = mutual_info_score(g_norm_0, l_norm_0)
+    # D_KL_1 = mutual_info_score(g_norm_1, l_norm_1)
+    # sk_D_KL = (D_KL_0 + D_KL_1) / 2
 
     D_KL_0 = 0.0
     D_KL_1 = 0.0
-
 
     for i in range(nb_bins):
         D_KL_0 += g_norm_0[i] * math.log(g_norm_0[i]/l_norm_0[i])
         D_KL_1 += g_norm_1[i] * math.log(g_norm_1[i]/l_norm_1[i])
 
     D_KL = (D_KL_0 + D_KL_1) / 2
-    return D_KL, sk_D_KL
+    return D_KL
 
 def calculate_novelty_threshold(latent_space, with_rnn):
 
@@ -699,7 +698,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
     # These are needed for the main algorithm
     network_activation = 0
-    klc_log = [[], []]                              # Record my ver and the sklearn ver
+    klc_log = []                             # Record my ver and the sklearn ver
     just_finished_training = True
     roulette_wheel = []
     repertoire_size = []
@@ -881,31 +880,20 @@ def AURORA_incremental_ballistic_task(with_rnn):
                     just_finished_training = True
             
         # 13. For each batch/generation, record various metrics
-        current_klc, sk_current_klc = KLC(pop, comparison_gt)
-        klc_log[0].append(current_klc)
-        klc_log[1].append(sk_current_klc)
+        current_klc = KLC(pop, comparison_gt)
+        klc_log.append(current_klc)
         repertoire_size.append(len(pop))
         rmse_log.append(np.mean(gen_rmse_log))
 
     plt.clf()
-    plt.plot(klc_log[0], label="KLC value per generation")
+    plt.plot(klc_log, label="KLC value per generation")
     plt.xlabel("Generation")
     plt.ylabel("Kullback-Leibler Divergence")
     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
-    np.save("mydata/inc_KLC.npy", klc_log[0])
-
-    plt.clf()
-    plt.plot(klc_log[1], label="KLC value per generation")
-    plt.xlabel("Generation")
-    plt.ylabel("Kullback-Leibler Divergence")
-    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-    plt.title(title)
-    save_name = "myplots/sk_KLC"
-    plt.savefig(save_name)
-    np.save("mydata/inc_sk_KLC.npy", klc_log[1])
+    np.save("mydata/inc_KLC.npy", klc_log)
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -1056,7 +1044,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     threshold = INITIAL_NOVLETY
 
     # These are needed for the main algorithm
-    klc_log = [[], []]                              # Record my ver and the sklearn ver
+    klc_log = []                          # Record my ver and the sklearn ver
     roulette_wheel = []
     repertoire_size = []
     big_error_log = [ [] for i in range(2) ]
@@ -1145,9 +1133,8 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                         pop[index].increase_curiosity()
 
         # 6. For each batch/generation, record various metrics
-        current_klc, sk_current_klc = KLC(pop, comparison_gt)
-        klc_log[0].append(current_klc)
-        klc_log[1].append(sk_current_klc)
+        current_klc = KLC(pop, comparison_gt)
+        klc_log.append(current_klc)
         repertoire_size.append(len(pop))
         rmse_log.append(np.mean(gen_rmse_log))
 
@@ -1158,24 +1145,14 @@ def AURORA_pretrained_ballistic_task(with_rnn):
 
 
     plt.clf()
-    plt.plot(klc_log[0], label="KLC value per generation")
+    plt.plot(klc_log, label="KLC value per generation")
     plt.xlabel("Generation")
     plt.ylabel("Kullback-Leibler Divergence")
     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
-    np.save("mydata/pre_KLC.npy", klc_log[0])
-
-    plt.clf()
-    plt.plot(klc_log[1], label="KLC value per generation")
-    plt.xlabel("Generation")
-    plt.ylabel("Kullback-Leibler Divergence")
-    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-    plt.title(title)
-    save_name = "myplots/sk_KLC"
-    plt.savefig(save_name)
-    np.save("mydata/pre_sk_KLC.npy", klc_log[1])
+    np.save("mydata/pre_KLC.npy", klc_log)
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -1219,7 +1196,7 @@ def Handcoded_Genotype(hand_ver):
     comparison_gt = np.load("GROUND_TRUTH.npy")
 
     # Create actual population
-    init_size = POPULATION_INITIAL_SIZE
+    init_size = POPULATION_INITIAL_SIZE * 4
     pop = []
     new_bd = np.zeros((1, 2))
     # latent_space = [ np.zeros((1,2)) for i in range(init_size)]
@@ -1243,12 +1220,30 @@ def Handcoded_Genotype(hand_ver):
         #     latent_space[m][0] = pop[m].get_key()
     print("Complete")
 
-    threshold = INITIAL_NOVLETY * 21
 
     # threshold = calculate_novelty_threshold(latent_space, False)
     # print(threshold)
-    # threshold = INITIAL_NOVLETY * 70
-    # nov_mods = [40, 30, 25, 20, 10, 5]
+    # threshold = INITIAL_NOVLETY * 80
+
+    # RETRAIN_ITER = [150, 350, 750, 1550, 3150]
+    # # nov_mods = [70, 50, 25, 10, 0.5]
+
+    # # RETRAIN_ITER = [150, 350, 750, 1550, 3150]
+    # nov_mods = [70, 50, 40, 30, 20]
+
+    # RETRAIN_ITER = [350, 750, 1550, 3150]
+    # nov_mods = [60, 40, 30, 10]
+    # RETRAIN_ITER = [350, 750, 2050]
+    # nov_mods = [60, 40, 10]
+
+    # threshold = INITIAL_NOVLETY * 80
+    # # RETRAIN_ITER = [350, 1050, 2550, 3150]
+    # RETRAIN_ITER = [350, 750, 1550, 3150]
+    # nov_mods = [60, 40, 20, 10]
+
+    # RETRAIN_ITER = [350, 750, 1550, 3150]
+    # nov_mods = [60, 40, 10, 5]
+
     # threshold = INITIAL_NOVLETY * 70
     # RETRAIN_ITER = [300, 1000, 2550]
     # nov_mods = [45, 25, 15]
@@ -1258,16 +1253,23 @@ def Handcoded_Genotype(hand_ver):
     # nov_mods = [50, 30, 20]
 
     # threshold = INITIAL_NOVLETY * 50
-    # RETRAIN_ITER = [150, 350, 750, 1550, 3150]
     # nov_mods = [40, 30, 25, 20, 5]
     # These are needed for the main algorithm
-    klc_log = [[], []]                              # Record my ver and the sklearn ver
+    klc_log = []                           # Record my ver and the sklearn ver
     roulette_wheel = []
     repertoire_size = []
+
+    threshold = INITIAL_NOVLETY * 55
     
-    nov_index = 0
+    # nov_index = 0
     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
     for generation in range(NB_QD_BATCHES):
+        # if generation == 500:
+        #     threshold = INITIAL_NOVLETY * 200
+        
+        # if generation == 1000:
+        #     threshold = INITIAL_NOVLETY *
+
         # if nov_index < len(RETRAIN_ITER):
         #     if generation == RETRAIN_ITER[nov_index]:
         #         threshold = INITIAL_NOVLETY * nov_mods[nov_index]
@@ -1292,16 +1294,15 @@ def Handcoded_Genotype(hand_ver):
             plot_gt(pop, generation)
         
         if generation != 0:
-            print(klc_log[0][-1])
+            print(klc_log[-1])
 
         # Begin Quality Diversity iterations
         print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
 
-        for j in range(NB_QD_ITERATIONS):
-
+        for j in range(NB_QD_ITERATIONS*3):
+            index = 0
             # 1. Select controller from population using curiosity proportionate selection
             selector = random.uniform(0, 1)
-            index = 0
             cumulative = roulette_wheel[index]
             while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
                 index += 1
@@ -1344,10 +1345,9 @@ def Handcoded_Genotype(hand_ver):
                     pop[index].increase_curiosity()
 
         # 6. For each batch/generation, record various metrics
-        current_klc, sk_current_klc = KLC(pop, comparison_gt)
+        current_klc = KLC(pop, comparison_gt)
         # print(current_klc)
-        klc_log[0].append(current_klc)
-        klc_log[1].append(sk_current_klc)
+        klc_log.append(current_klc)
         repertoire_size.append(len(pop))
 
 
@@ -1357,7 +1357,7 @@ def Handcoded_Genotype(hand_ver):
 
 
     plt.clf()
-    plt.plot(klc_log[0], label="KLC value per generation")
+    plt.plot(klc_log, label="KLC value per generation")
     plt.xlabel("Generation")
     plt.ylabel("Kullback-Leibler Divergence")
     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
@@ -1365,23 +1365,9 @@ def Handcoded_Genotype(hand_ver):
     save_name = "myplots/KLC"
     plt.savefig(save_name)
     if hand_ver == True:
-        np.save("mydata/hand_KLC.npy", klc_log[0])
+        np.save("mydata/hand_KLC.npy", klc_log)
     else:
-        np.save("mydata/geno_KLC.npy", klc_log[0])
-
-
-    plt.clf()
-    plt.plot(klc_log[1], label="KLC value per generation")
-    plt.xlabel("Generation")
-    plt.ylabel("Kullback-Leibler Divergence")
-    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-    plt.title(title)
-    save_name = "myplots/sk_KLC"
-    plt.savefig(save_name)
-    if hand_ver == True:
-        np.save("mydata/hand_sk_KLC.npy", klc_log[0])
-    else:
-        np.save("mydata/geno_sk_KLC.npy", klc_log[0])
+        np.save("mydata/geno_KLC.npy", klc_log)
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -1393,161 +1379,11 @@ def Handcoded_Genotype(hand_ver):
     plt.savefig(save_name)
     np.save("mydata/hand_repSize.npy", repertoire_size)
     if hand_ver == True:
-        np.save("mydata/hand_repSize.npy", klc_log[0])
+        np.save("mydata/hand_repSize.npy", repertoire_size)
     else:
-        np.save("mydata/geno_repSize.npy", klc_log[0])
+        np.save("mydata/geno_repSize.npy", repertoire_size)
 
     plot_gt(pop, -1)
-
-# def Genotype():
-#     comparison_gt = np.load("GROUND_TRUTH.npy")
-#     # Create actual population
-#     init_size = POPULATION_INITIAL_SIZE 
-#     latent_space = [ np.zeros((1,2)) for i in range(init_size)]
-#     pop = []
-#     new_bd = np.zeros((1, 2))
-#     print("Creating population container")
-#     for b in range(init_size):
-#         new_indiv = individual.indiv()
-#         pop.append(new_indiv)
-#     print("Complete")
-#     print("Evaluating population container")
-#     # for member in pop:
-#     #     genotype = [random.uniform(0, 1), random.uniform(0, 1)]
-#     #     member.eval(genotype)
-#     #     new_bd[0] = member.get_key()
-#     #     member.set_bd(new_bd)
-#     for m in range(len(pop)):
-#         genotype = [random.uniform(0, 1), random.uniform(0, 1)]
-#         pop[m].eval(genotype)
-#         new_bd[0] = pop[m].get_key()
-#         pop[m].set_bd(new_bd)
-#         latent_space[m][0] = pop[m].get_key()
-#     print("Complete")
-
-#     # for member in pop:
-#     #     bd = member.get_key()
-#     #     member.set_bd(bd)
-
-#     # Record current latent space
-#     plot_latent_gt(pop, 0)
-
-#     # Calculate starting novelty threshold
-#     threshold = calculate_novelty_threshold(latent_space, False)
-
-#     # These are needed for the main algorithm
-#     klc_log = [[], []]                              # Record my ver and the sklearn ver
-#     roulette_wheel = []
-#     repertoire_size = []
-#     nov_index = 0
-#     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
-#     for generation in range(NB_QD_BATCHES):
-#         if nov_index < len(RETRAIN_ITER):
-#             if generation == RETRAIN_ITER[nov_index]:
-#                 latent_space = [ np.zeros((1,2)) for i in range(len(pop))]
-#                 for m in range(len(pop)):
-#                     latent_space[m][0] = pop[m].get_gt()
-#                 threshold = calculate_novelty_threshold(latent_space, False)
-#                 print("New threshold is " + str(threshold))
-#                 nov_index +=1
-
-#         roulette_wheel = make_wheel(pop)
-#         x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
-
-#         if generation % 1000 == 0:
-#             now = datetime.now()
-#             current_time = now.strftime("%H:%M:%S")
-#             print("Current Time =", current_time)
-
-#         # Begin Quality Diversity iterations
-#         print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
-
-#         for j in range(NB_QD_ITERATIONS):
-
-#             # 1. Select controller from population using curiosity proportionate selection
-#             selector = random.uniform(0, 1)
-#             index = 0
-#             cumulative = roulette_wheel[index]
-#             while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
-#                 index += 1
-#                 cumulative += roulette_wheel[index]
-#             this_indiv = pop[index]
-
-#             controller = this_indiv.get_key()
-
-#             # 2. Mutate and evaluate the chosen controller
-#             new_indiv = mut_eval(controller)
-
-#             if is_indiv_legal(new_indiv, this_indiv) == True:
-#                 # 3. Get new Behavioural Descriptor
-#                 new_bd[0] = new_indiv.get_key()
-
-#                 # 4. See if the new Behavioural Descriptor is novel enough
-#                 novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
-#                 # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
-#                 if dominated == -1:                           #    If the individual did not dominate another individual
-#                     if novelty >= threshold:                  #    If the individual is novel
-#                         new_indiv.set_bd(new_bd)
-#                         new_indiv.set_novelty(novelty)
-#                         pop.append(new_indiv)
-
-#                         # Increase curiosity score of individual
-#                         pop[index].increase_curiosity()
-
-#                     else:                                    #    If the individual is NOT novel
-#                         # Decrease curiosity score of individual
-#                         pop[index].decrease_curiosity()
-#                 else:                                         #    If the individual dominated another individual
-#                     new_indiv.set_bd(new_bd)
-#                     new_indiv.set_novelty(novelty)
-#                     pop[dominated] = new_indiv
-
-#                     # Increase curiosity score of individual
-#                     pop[index].increase_curiosity()
-
-#         # 6. For each batch/generation, record various metrics
-#         current_klc, sk_current_klc = KLC(pop, comparison_gt)
-#         klc_log[0].append(current_klc)
-#         klc_log[1].append(sk_current_klc)
-#         repertoire_size.append(len(pop))
-
-
-#     now = datetime.now()
-#     current_time = now.strftime("%H:%M:%S")
-#     print("Current Time =", current_time)
-
-
-#     plt.clf()
-#     plt.plot(klc_log[0], label="KLC value per generation")
-#     plt.xlabel("Generation")
-#     plt.ylabel("Kullback-Leibler Divergence")
-#     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-#     plt.title(title)
-#     save_name = "myplots/geno_KLC"
-#     plt.savefig(save_name)
-#     np.save("mydata/geno_KLC.npy", klc_log[0])
-
-#     plt.clf()
-#     plt.plot(klc_log[1], label="KLC value per generation")
-#     plt.xlabel("Generation")
-#     plt.ylabel("Kullback-Leibler Divergence")
-#     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-#     plt.title(title)
-#     save_name = "myplots/geno_sk_KLC"
-#     plt.savefig(save_name)
-#     np.save("mydata/geno_sk_KLC.npy", klc_log[1])
-    
-#     plot_latent_gt(pop, -1)
-
-#     plt.clf()
-#     plt.plot(repertoire_size)
-#     plt.xlabel("Generation")
-#     plt.ylabel("Repertorise Size")
-#     title = "Repertoire Size per Generation"
-#     plt.title(title)
-#     save_name = "myplots/geno_RepSize"
-#     plt.savefig(save_name)
-#     np.save("mydata/geno_rep_size.npy", repertoire_size)
 
 def get_GROUND_TRUTH():
     dim = 125
