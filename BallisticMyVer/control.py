@@ -6,7 +6,7 @@ import individual
 import random
 import math
 from original_ae import AE
-from sklearn.metrics import mutual_info_score
+# from sklearn.metrics import mutual_info_score
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
@@ -122,11 +122,11 @@ def dummy_split(pop_size):
     t_v_list.append([training_indices, val_indices])
     return t_v_list
 
-def train_ae(autoencoder, population, when_trained, with_rnn):
+def train_ae(autoencoder, population, when_trained, with_rnn, pre):
 
     _max, _min = get_scaling_vars(population)
     is_pretrained = False
-    if len(population) == 10000:
+    if pre == True:
         is_pretrained = True
         print("Confirmed pretrained version")
 
@@ -650,7 +650,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     # The collected sensory data makes up the first dataset
     print("Evaluating current population")
     for member in pop:
-        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+        genotype = [random.uniform(FIT_MIN, FIT_MAX), random.uniform(FIT_MIN, FIT_MAX)]
         member.eval(genotype)
     print("Complete")
 
@@ -659,7 +659,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     my_ae = AE(with_rnn)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae, t_error, v_error = train_ae(my_ae, pop, 0, with_rnn)
+    my_ae, t_error, v_error = train_ae(my_ae, pop, 0, with_rnn, False)
 
     # Create container for laten space representation
     latent_space = []
@@ -674,8 +674,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 image = member.get_scaled_image(_max, _min)
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
                 member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                member.set_bd(member_bd)
-                latent_space.append(member_bd)
+                member.set_bd(member_bd.copy())
+                latent_space.append(member_bd.copy())
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
@@ -685,8 +685,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 network_input_image = translate_image(rnn_output)
                 member_bd = sess.run((my_ae.latent), \
                     feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                member.set_bd(member_bd)
-                latent_space.append(member_bd)
+                member.set_bd(member_bd.copy())
+                latent_space.append(member_bd.copy())
     
     # Record current latent space
     plot_latent_gt(pop, 0)
@@ -779,8 +779,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                     if dominated == -1:                           #    If the individual did not dominate another individual
                         # print("no_domination")
                         if novelty >= threshold:                  #    If the individual is novel
-                            new_indiv.set_bd(new_bd)
-                            new_indiv.set_novelty(novelty)
+                            new_indiv.set_bd(new_bd.copy())
                             pop.append(new_indiv)
 
                             # Increase curiosity score of individual
@@ -790,8 +789,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                             # Decrease curiosity score of individual
                             pop[index].decrease_curiosity()
                     else:                                         #    If the individual dominated another individual
-                        new_indiv.set_bd(new_bd)
-                        new_indiv.set_novelty(novelty)
+                        new_indiv.set_bd(new_bd.copy())
                         pop[dominated] = new_indiv
 
                         # Increase curiosity score of individual
@@ -813,7 +811,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
                 # 6. Retrain Autoencoder after a number of QD iterations
                 print("Training Autoencoder, this is training session: " + str(network_activation + 2) + "/" + str(len(RETRAIN_ITER) + 1))
-                my_ae, t_error, v_error = train_ae(my_ae, pop, generation, with_rnn)
+                my_ae, t_error, v_error = train_ae(my_ae, pop, generation, with_rnn, False)
                 print("Completed retraining")
 
                 tmp = t_error.copy()
@@ -845,8 +843,8 @@ def AURORA_incremental_ballistic_task(with_rnn):
                                 feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                             this_bd = member_bd.copy()
 
-                        member.set_bd(this_bd)
-                        latent_space.append(this_bd)
+                        member.set_bd(this_bd.copy())
+                        latent_space.append(this_bd.copy())
 
                 # 9. Calculate new novelty threshold to ensure population size less than 10000
                 threshold = calculate_novelty_threshold(latent_space, with_rnn)
@@ -856,14 +854,12 @@ def AURORA_incremental_ballistic_task(with_rnn):
                 print("Add viable members back to population")
                 new_pop = []
                 for member in pop:
-                    this_bd = member.get_bd()
+                    this_bd = member.get_bd().copy()
                     novelty, dominated = grow_pop_calculate_novelty(this_bd, new_pop, threshold, True)
                     if dominated == -1:                           #    If the individual did not dominate another individual
                         if novelty >= threshold:                  #    If the individual is novel
-                            member.set_novelty(novelty)
                             new_pop.append(member)
                     else:                                         #    If the individual dominated another individual
-                        member.set_novelty(novelty)
                         new_pop[dominated] = member
 
                 pop = new_pop
@@ -933,55 +929,20 @@ def AURORA_incremental_ballistic_task(with_rnn):
 # The only difference between the other basic ballistic task is that this is only trained once and with more samples    
 def AURORA_pretrained_ballistic_task(with_rnn):
     comparison_gt = np.load("GROUND_TRUTH.npy")
-    init_size = 100 * 100           # Initial size of population
-    training_pop = []                                  # Container for training population
-
-    # Collect sensory data of the generated controllers. In the case of the ballistic task this is the trajectories but any sensory data can be considered
-    # The collected sensory data makes up the first dataset
-    # print("Creating and Evaluating training population")
-    # step_size = (FIT_MAX - FIT_MIN)/100
-    # genotype = [0.0, 0.0]
-
-
-    # for i in range(100):
-    #     for j in range(100):
-    #         new_indiv = individual.indiv()
-    #         new_indiv.eval(genotype)
-    #         training_pop.append(new_indiv)
-    #         genotype[1] += step_size
-    #     genotype[0] += step_size
-
-    # for member in training_pop:
-    #     genotype = [random.uniform(0, 1), random.uniform(0, 1)]
-    #     member.eval(genotype)
-    # print("Complete")
-    # print("Creating training population")
-    # for i in range(init_size):
-    #     new_indiv = individual.indiv()
-    #     training_pop.append(new_indiv)
-
-    # print("Evaluating training population")
-    # step_size = (FIT_MAX - FIT_MIN)/100
-    # genotype = [FIT_MIN, FIT_MIN]
-    # for member in training_pop:
-    #     if genotype[1] > FIT_MAX:
-    #         genotype[1] = FIT_MIN
-    #         genotype[0] += step_size
-    #     member.eval(genotype)
-    #     genotype[1] += step_size
-    # print("Complete")
+    # Randomly generate some controllers
+    training_pop = []                               # Container for training population
     dim = 100
-    init_size = dim * dim           # Initial size of population
-    pop = []                        # Container for population
-    print("Creating population")
-    for i in range(init_size):
+    init_size = dim * dim                           # Initial size of population
+    print("Creating population container")
+    for b in range(init_size):
         new_indiv = individual.indiv()
-        pop.append(new_indiv)
+        training_pop.append(new_indiv)
     print("Complete")
+
     print("Evaluating population")
     step_size = (FIT_MAX - FIT_MIN)/dim
     genotype = [FIT_MIN, FIT_MIN]
-    for member in pop:
+    for member in training_pop:
         if genotype[1] > FIT_MAX:
             genotype[1] = FIT_MIN
             genotype[0] += step_size
@@ -994,48 +955,40 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     my_ae = AE(with_rnn)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
-    my_ae, t_error, v_error = train_ae(my_ae, training_pop, 0, with_rnn)
+    my_ae, t_error, v_error = train_ae(my_ae, training_pop, 0, with_rnn, True)
 
-    # Create container for laten space representation
-    latent_space = []
-
-    # Create actual population
-    init_size = POPULATION_INITIAL_SIZE 
-    pop = []
+    init_size = POPULATION_INITIAL_SIZE            # Initial size of population
+    pop = []                                       # Container for population
     print("Creating population container")
     for b in range(init_size):
         new_indiv = individual.indiv()
         pop.append(new_indiv)
     print("Complete")
-
-    # Collect sensory data of the generated controllers. In the case of the ballistic task this is the trajectories but any sensory data can be considered
-    # The collected sensory data makes up the first dataset
     print("Evaluating current population")
     for member in pop:
-        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+        genotype = [random.uniform(FIT_MIN, FIT_MAX), random.uniform(FIT_MIN, FIT_MAX)]
         member.eval(genotype)
     print("Complete")
 
-
     _max, _min = get_scaling_vars(pop)
 
-    # Use the now trained Autoencoder to get the behavioural descriptors
+    # Create container for latent space representation
+    latent_space = []
+
     with tf.Session() as sess:
         my_ae.saver.restore(sess, "MY_MODEL")
         for member in pop:
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
-                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
                 member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                member.set_bd(member_bd)
-                latent_space.append(member_bd)
+                member.set_bd(member_bd.copy())
+                latent_space.append(member_bd.copy())
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 rnn_image = member.get_lstm_embed_traj()
-                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
                 member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                member.set_bd(member_bd)
-                latent_space.append(member_bd)
+                member.set_bd(member_bd.copy())
+                latent_space.append(member_bd.copy())
     
     # Record current latent space
     plot_latent_gt(pop, 0)
@@ -1114,8 +1067,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                     # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
                     if dominated == -1:                           #    If the individual did not dominate another individual
                         if novelty >= threshold:                  #    If the individual is novel
-                            new_indiv.set_bd(new_bd)
-                            new_indiv.set_novelty(novelty)
+                            new_indiv.set_bd(new_bd.copy())
                             pop.append(new_indiv)
 
                             # Increase curiosity score of individual
@@ -1125,8 +1077,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                             # Decrease curiosity score of individual
                             pop[index].decrease_curiosity()
                     else:                                         #    If the individual dominated another individual
-                        new_indiv.set_bd(new_bd)
-                        new_indiv.set_novelty(novelty)
+                        new_indiv.set_bd(new_bd.copy())
                         pop[dominated] = new_indiv
 
                         # Increase curiosity score of individual
@@ -1197,92 +1148,45 @@ def Handcoded_Genotype(hand_ver):
 
     # Create actual population
     init_size = POPULATION_INITIAL_SIZE * 4
+    # if hand_ver == False:
+    #     init_size = POPULATION_INITIAL_SIZE * 3
     pop = []
     new_bd = np.zeros((1, 2))
-    # latent_space = [ np.zeros((1,2)) for i in range(init_size)]
     print("Creating population container")
     for b in range(init_size):
         new_indiv = individual.indiv()
         pop.append(new_indiv)
     print("Complete")
     print("Evaluating population container")
+    latent_space = [ np.zeros((1,2)) for i in range(len(pop))]
     for m in range(len(pop)):
-        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+        genotype = [random.uniform(FIT_MIN, FIT_MAX), random.uniform(FIT_MIN, FIT_MAX)]
         pop[m].eval(genotype)
         if hand_ver == True:
             new_bd[0] = pop[m].get_gt()
         else:
             new_bd[0] = pop[m].get_key()
-        pop[m].set_bd(new_bd)
-        # if hand_ver == True:
-        #     latent_space[m][0] = pop[m].get_gt()
-        # else:
-        #     latent_space[m][0] = pop[m].get_key()
+        pop[m].set_bd(new_bd.copy())
+        latent_space[m][0] = new_bd.copy()
     print("Complete")
+    # print(latent_space)
+    # print(calculate_novelty_threshold(latent_space, False))
+    # for m in pop:
+    #     print(m.get_bd())
 
-
-    # threshold = calculate_novelty_threshold(latent_space, False)
-    # print(threshold)
-    # threshold = INITIAL_NOVLETY * 80
-
-    # RETRAIN_ITER = [150, 350, 750, 1550, 3150]
-    # # nov_mods = [70, 50, 25, 10, 0.5]
-
-    # # RETRAIN_ITER = [150, 350, 750, 1550, 3150]
-    # nov_mods = [70, 50, 40, 30, 20]
-
-    # RETRAIN_ITER = [350, 750, 1550, 3150]
-    # nov_mods = [60, 40, 30, 10]
-    # RETRAIN_ITER = [350, 750, 2050]
-    # nov_mods = [60, 40, 10]
-
-    # threshold = INITIAL_NOVLETY * 80
-    # # RETRAIN_ITER = [350, 1050, 2550, 3150]
-    # RETRAIN_ITER = [350, 750, 1550, 3150]
-    # nov_mods = [60, 40, 20, 10]
-
-    # RETRAIN_ITER = [350, 750, 1550, 3150]
-    # nov_mods = [60, 40, 10, 5]
-
-    # threshold = INITIAL_NOVLETY * 70
-    # RETRAIN_ITER = [300, 1000, 2550]
-    # nov_mods = [45, 25, 15]
-
-    # threshold = INITIAL_NOVLETY * 100
-    # RETRAIN_ITER = [750, 1550, 3150]
-    # nov_mods = [50, 30, 20]
-
-    # threshold = INITIAL_NOVLETY * 50
-    # nov_mods = [40, 30, 25, 20, 5]
-    # These are needed for the main algorithm
-    klc_log = []                           # Record my ver and the sklearn ver
+    klc_log = []
     roulette_wheel = []
     repertoire_size = []
 
-    threshold = INITIAL_NOVLETY * 55
-    
-    # nov_index = 0
-    # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
+    threshold = INITIAL_NOVLETY * 0.5
+
+    NB_QD_ITERATIONS = 200
+    if hand_ver == True:
+        NB_QD_ITERATIONS = NB_QD_ITERATIONS * 3
+    else:
+        threshold = INITIAL_NOVLETY * 0.5
+
     for generation in range(NB_QD_BATCHES):
-        # if generation == 500:
-        #     threshold = INITIAL_NOVLETY * 200
-        
-        # if generation == 1000:
-        #     threshold = INITIAL_NOVLETY *
-
-        # if nov_index < len(RETRAIN_ITER):
-        #     if generation == RETRAIN_ITER[nov_index]:
-        #         threshold = INITIAL_NOVLETY * nov_mods[nov_index]
-        #         # latent_space = [ np.zeros((1,2)) for i in range(len(pop)) ]
-        #         # for m in range(len(pop)):
-        #         #     if hand_ver == True:
-        #         #         latent_space[m][0] = pop[m].get_gt()
-        #         #     else:
-        #         #         latent_space[m][0] = pop[m].get_key()
-        #         # threshold = calculate_novelty_threshold(latent_space, False)
-        #         print("New threshold is " + str(threshold))
-        #         nov_index+=1
-
         roulette_wheel = make_wheel(pop)
         x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
 
@@ -1291,7 +1195,10 @@ def Handcoded_Genotype(hand_ver):
             current_time = now.strftime("%H:%M:%S")
             print("Current Time =", current_time)
         if generation % 500 == 0:
-            plot_gt(pop, generation)
+            if hand_ver == True:
+                plot_gt(pop, generation)
+            else:
+                plot_latent_gt(pop, generation)
         
         if generation != 0:
             print(klc_log[-1])
@@ -1299,7 +1206,7 @@ def Handcoded_Genotype(hand_ver):
         # Begin Quality Diversity iterations
         print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
 
-        for j in range(NB_QD_ITERATIONS*3):
+        for j in range(NB_QD_ITERATIONS):
             index = 0
             # 1. Select controller from population using curiosity proportionate selection
             selector = random.uniform(0, 1)
@@ -1326,8 +1233,7 @@ def Handcoded_Genotype(hand_ver):
                 # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
                 if dominated == -1:                           #    If the individual did not dominate another individual
                     if novelty >= threshold:                  #    If the individual is novel
-                        new_indiv.set_bd(new_bd)
-                        new_indiv.set_novelty(novelty)
+                        new_indiv.set_bd(new_bd.copy())
                         pop.append(new_indiv)
 
                         # Increase curiosity score of individual
@@ -1337,8 +1243,7 @@ def Handcoded_Genotype(hand_ver):
                         # Decrease curiosity score of individual
                         pop[index].decrease_curiosity()
                 else:                                         #    If the individual dominated another individual
-                    new_indiv.set_bd(new_bd)
-                    new_indiv.set_novelty(novelty)
+                    new_indiv.set_bd(new_bd.copy())
                     pop[dominated] = new_indiv
 
                     # Increase curiosity score of individual
@@ -1377,13 +1282,15 @@ def Handcoded_Genotype(hand_ver):
     plt.title(title)
     save_name = "myplots/RepSize"
     plt.savefig(save_name)
-    np.save("mydata/hand_repSize.npy", repertoire_size)
     if hand_ver == True:
         np.save("mydata/hand_repSize.npy", repertoire_size)
     else:
         np.save("mydata/geno_repSize.npy", repertoire_size)
 
-    plot_gt(pop, -1)
+    if hand_ver == True:
+        plot_gt(pop, -1)
+    else: 
+        plot_latent_gt(pop, -1)
 
 def get_GROUND_TRUTH():
     dim = 125
@@ -1422,10 +1329,8 @@ def get_GROUND_TRUTH():
         novelty, dominated = grow_pop_calculate_novelty(np.array(this_bd), new_pop, INITIAL_NOVLETY, True)
         if dominated == -1:                           #    If the individual did not dominate another individual
             if novelty >= INITIAL_NOVLETY:            #    If the individual is novel
-                member.set_novelty(novelty)
                 new_pop.append(member)
         else:                                         #    If the individual dominated another individual
-            member.set_novelty(novelty)
             new_pop[dominated] = member
         count += 1
 
