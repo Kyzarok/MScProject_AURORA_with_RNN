@@ -31,8 +31,8 @@ NB_QD_BATCHES = 5000
 # Params much lower for testing purposes
 # NB_QD_BATCHES = 40
 # RETRAIN_ITER = [10, 20, 30]
-# POPULATION_INITIAL_SIZE = 20
-# NUM_EPOCH = 3
+# POPULATION_INITIAL_SIZE = 5000
+# NUM_EPOCH = 1
 
 MUTATION_RATE = 0.1
 ETA = 10
@@ -112,9 +112,23 @@ def split_dataset(pop_size):
         t_v_list.append([training_indices, val_indices])
     return t_v_list
 
+def dummy_split(pop_size):
+    indices = [ i for i in range(pop_size)]
+    t_v_list = []
+    this_list = indices.copy()
+    random.shuffle(this_list)
+    training_indices = this_list
+    val_indices = [0 for i in range(pop_size)]
+    t_v_list.append([training_indices, val_indices])
+    return t_v_list
+
 def train_ae(autoencoder, population, when_trained, with_rnn):
 
     _max, _min = get_scaling_vars(population)
+    is_pretrained = False
+    if len(population) == 10000:
+        is_pretrained = True
+        print("Confirmed pretrained version")
 
     t_loss_record = []
     v_loss_record = []
@@ -132,7 +146,11 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
         autoencoder.reset_optimizer_op
         
         # Get training and validation datasets
-        ref_dataset = split_dataset(len(population))
+        ref_dataset = None
+        if is_pretrained == False:
+            ref_dataset = split_dataset(len(population))
+        else:
+            ref_dataset = dummy_split(len(population))
 
         print("Beginning Training of Autoencoder")
         now = datetime.now()
@@ -184,38 +202,39 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
 
 
                 # Calcualte epoch validation loss
-                for v in validation_data:
-                    member = population[v]
-                    if with_rnn == True:
-                        true_image = member.get_scaled_image(_max, _min)
-                        rnn_image = member.get_lstm_embed_traj() 
-                        rnn_output = session.run((autoencoder.rnn_output_image),\
-                             feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
-                        network_input_image = translate_image(rnn_output)
-                        loss = session.run((autoencoder.loss), \
-                            feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                if is_pretrained == False:
+                    for v in validation_data:
+                        member = population[v]
+                        if with_rnn == True:
+                            true_image = member.get_scaled_image(_max, _min)
+                            rnn_image = member.get_lstm_embed_traj() 
+                            rnn_output = session.run((autoencoder.rnn_output_image),\
+                                feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                            network_input_image = translate_image(rnn_output)
+                            loss = session.run((autoencoder.loss), \
+                                feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                            
+                            v_loss += np.mean(loss)
+                        else:
+                            image = member.get_scaled_image(_max, _min)
+                            loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                            v_loss += np.mean(loss)
+
+                    v_loss_record.append(v_loss)
+
+                    if len(v_loss_record) >= check_state:
+                        # Get the last 500 values of validation loss
+                        calc_avg_loss = v_loss_record[-check_state:]
+                        # Calculate the average
+                        calc_avg_loss = np.mean(calc_avg_loss)
+
+                        # If validation loss has increased OR if max epoch count has been reached, stop the training session
+                        if (calc_avg_loss > last_val_loss):
+                            condition = False
                         
-                        v_loss += np.mean(loss)
-                    else:
-                        image = member.get_scaled_image(_max, _min)
-                        loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
-                        v_loss += np.mean(loss)
-
-                v_loss_record.append(v_loss)
-
-                if len(v_loss_record) >= check_state:
-                    # Get the last 500 values of validation loss
-                    calc_avg_loss = v_loss_record[-check_state:]
-                    # Calculate the average
-                    calc_avg_loss = np.mean(calc_avg_loss)
-
-                    # If validation loss has increased OR if max epoch count has been reached, stop the training session
-                    if (calc_avg_loss > last_val_loss):
-                        condition = False
-                    
-                    else:
-                        # Record new value to use as previous validation loss
-                        last_val_loss = calc_avg_loss
+                        else:
+                            # Record new value to use as previous validation loss
+                            last_val_loss = calc_avg_loss
 
                 if (epoch == NUM_EPOCH):
                         condition = False
@@ -248,28 +267,31 @@ def train_ae(autoencoder, population, when_trained, with_rnn):
     plt.savefig(save_name)
     return autoencoder, t_loss_record, v_loss_record
 
-def KLC(population):
+def KLC(population, true_gt):
     nb_bins = 30
 
     # Get the "ground truth", aka the manually defined behavioural descriptor, and the current encoder latent space
-    ground_truth_0 = []
-    ground_truth_1 = []
-    latent_space_0 = []
-    latent_space_1 = []
+    my_gt_0 = []
+    my_gt_1 = []
+    true_gt_0 = true_gt[0]
+    true_gt_1 = true_gt[1]
     for member in population:
         gt = member.get_gt()
-        ground_truth_0.append(gt[0])
-        ground_truth_1.append(gt[1])
-        bd = member.get_bd()[0]
-        latent_space_0.append(bd[0])
-        latent_space_1.append(bd[1])
+        my_gt_0.append(gt[0])
+        my_gt_1.append(gt[1])
 
     # Get normalized histograms of the data
-    g_norm_0, _, _ = plt.hist(ground_truth_0, bins=nb_bins, density=True)
-    g_norm_1, _, _ = plt.hist(ground_truth_1, bins=nb_bins, density=True)
+    l_norm_0, _, _ = plt.hist(my_gt_0, bins=nb_bins)#, density=True, stacked=True)
+    l_norm_1, _, _ = plt.hist(my_gt_1, bins=nb_bins)#, density=True, stacked=True)
 
-    l_norm_0, _, _ = plt.hist(latent_space_0, bins=nb_bins, density=True)
-    l_norm_1, _, _ = plt.hist(latent_space_1, bins=nb_bins, density=True)
+    g_norm_0, _, _ = plt.hist(true_gt_0, bins=nb_bins)#, density=True, stacked=True)
+    g_norm_1, _, _ = plt.hist(true_gt_1, bins=nb_bins)#, density=True, stacked=True)
+
+
+    g_norm_0 /= sum(g_norm_0)
+    g_norm_1 /= sum(g_norm_1)
+    l_norm_0 /= sum(l_norm_0)
+    l_norm_1 /= sum(l_norm_1)
 
     for i in range(nb_bins):
         # Case controlis necessary as these histograms exist to act as pseudo probability distributions
@@ -381,6 +403,15 @@ def mut_eval(indiv_params):
     new_indiv.eval(new_params)
     return new_indiv
 
+def is_indiv_legal(new_guy, old_guy):
+    get_key = new_guy.get_key()
+    get_parent_key = old_guy.get_key()
+    if FIT_MIN <= get_key[0] <= FIT_MAX and FIT_MIN <= get_key[1] <= FIT_MAX:
+        if get_key[0] != get_parent_key[0] and get_key[1] != get_parent_key[1]:
+            return True
+    else:
+        return False
+
 def grow_pop_does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novelty):
     dominated_indiv = -1
     x_1_novelty = init_novelty
@@ -453,6 +484,7 @@ def grow_pop_calculate_novelty(this_bd, population, curr_threshold, check_domina
 def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, x_squared, two_x, y_squared, two_y, population):
     dominated_indiv = -1
     x_1_novelty = dist_from_k_n_n[0]
+    # print(dist_from_k_n_n)
     if (curr_threshold > dist_from_k_n_n[0]) and (curr_threshold < dist_from_k_n_n[1]):
         x_1_novelty = dist_from_k_n_n[1]
         x_2_novelty, _ = calculate_novelty(population[k_n_n[0]].get_bd(), curr_threshold, False, x_squared, two_x, y_squared, two_y, population)
@@ -548,6 +580,40 @@ def plot_latent_gt(population, when_trained):
     save_name = "myplots/Ground_Truth_AE_Trained_"+str(when_trained)
     plt.savefig(save_name)
 
+def plot_gt(population, when_trained):
+    g_x = []
+    g_y = []
+
+    for member in population:
+        this_x, this_y = member.get_gt()
+        g_x.append(this_x)
+        g_y.append(this_y)
+
+    t = np.arange(len(population))
+
+    euclidean_from_zero_gt = []
+    for i in range(len(g_x)):
+        distance = g_x[i]**2 + g_y[i]**2
+        euclidean_from_zero_gt.append(distance)
+
+    g_x = [x for _,x in sorted(zip(euclidean_from_zero_gt, g_x))]
+    g_y = [y for _,y in sorted(zip(euclidean_from_zero_gt, g_y))]
+
+    plt.clf()
+    plt.scatter(g_x, g_y, c=t, cmap="rainbow")
+    plt.xlabel("X position at Max Height")
+    plt.ylabel("Max Height Achieved")
+    title = None
+    if when_trained == 0:
+        title = "Ground Truth at Initialisation"
+    elif when_trained == -1:
+        title = "Ground Truth at Final Generation"
+    else:
+        title = "Ground Truth at Generation " + str(when_trained)
+    plt.title(title)
+    save_name = "myplots/Ground_Truth_"+str(when_trained)
+    plt.savefig(save_name)
+
 # Function to make the curiosity proportionate roulette wheel
 def make_wheel(population):
     literal_roulette_curiosities = []
@@ -571,6 +637,7 @@ def make_wheel(population):
 
 
 def AURORA_incremental_ballistic_task(with_rnn):
+    comparison_gt = np.load("GROUND_TRUTH.npy")
     # Randomly generate some controllers
     init_size = POPULATION_INITIAL_SIZE            # Initial size of population
     pop = []                                        # Container for population
@@ -684,52 +751,52 @@ def AURORA_incremental_ballistic_task(with_rnn):
 
                 # 2. Mutate and evaluate the chosen controller
                 new_indiv = mut_eval(controller)
+                if is_indiv_legal(new_indiv, this_indiv) == True:
+                    new_bd = None
+                    out = None
+                    image = None
 
-                new_bd = None
-                out = None
-                image = None
+                    # 3. Get the Behavioural Descriptor for the new individual
+                    if with_rnn == False:
+                        image = new_indiv.get_scaled_image(_max, _min)
+                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    else:
+                        true_image = new_indiv.get_scaled_image(_max, _min)
+                        rnn_image = new_indiv.get_lstm_embed_traj()
+                        rnn_output = sess.run((my_ae.rnn_output_image),\
+                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        network_input_image = translate_image(rnn_output)
+                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
+                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        image = true_image
 
-                # 3. Get the Behavioural Descriptor for the new individual
-                if with_rnn == False:
-                    image = new_indiv.get_scaled_image(_max, _min)
-                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                else:
-                    true_image = new_indiv.get_scaled_image(_max, _min)
-                    rnn_image = new_indiv.get_lstm_embed_traj()
-                    rnn_output = sess.run((my_ae.rnn_output_image),\
-                            feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                    network_input_image = translate_image(rnn_output)
-                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
-                        feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                    image = true_image
+                    gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
 
-                gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
+                    # 4. See if the new Behavioural Descriptor is novel enough
+                    # novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
 
-                # 4. See if the new Behavioural Descriptor is novel enough
-                # novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
+                    novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
+                    # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
+                    if dominated == -1:                           #    If the individual did not dominate another individual
+                        # print("no_domination")
+                        if novelty >= threshold:                  #    If the individual is novel
+                            new_indiv.set_bd(new_bd)
+                            new_indiv.set_novelty(novelty)
+                            pop.append(new_indiv)
 
-                novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
-                # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
-                if dominated == -1:                           #    If the individual did not dominate another individual
-                    # print("no_domination")
-                    if novelty >= threshold:                  #    If the individual is novel
+                            # Increase curiosity score of individual
+                            pop[index].increase_curiosity()
+
+                        else:                                    #    If the individual is NOT novel
+                            # Decrease curiosity score of individual
+                            pop[index].decrease_curiosity()
+                    else:                                         #    If the individual dominated another individual
                         new_indiv.set_bd(new_bd)
                         new_indiv.set_novelty(novelty)
-                        pop.append(new_indiv)
+                        pop[dominated] = new_indiv
 
                         # Increase curiosity score of individual
                         pop[index].increase_curiosity()
-
-                    else:                                    #    If the individual is NOT novel
-                        # Decrease curiosity score of individual
-                        pop[index].decrease_curiosity()
-                else:                                         #    If the individual dominated another individual
-                    new_indiv.set_bd(new_bd)
-                    new_indiv.set_novelty(novelty)
-                    pop[dominated] = new_indiv
-
-                    # Increase curiosity score of individual
-                    pop[index].increase_curiosity()
 
 
         just_finished_training = False
@@ -737,6 +804,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
         # Check if this generation is before the last retraining session
         if network_activation < len(RETRAIN_ITER):
             if generation == RETRAIN_ITER[network_activation]:
+                # plot_latent_gt(pop, generation-1)
 
                 print("Finished QD iterations")
                 now = datetime.now()
@@ -813,7 +881,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
                     just_finished_training = True
             
         # 13. For each batch/generation, record various metrics
-        current_klc, sk_current_klc = KLC(pop)
+        current_klc, sk_current_klc = KLC(pop, comparison_gt)
         klc_log[0].append(current_klc)
         klc_log[1].append(sk_current_klc)
         repertoire_size.append(len(pop))
@@ -827,7 +895,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
-    np.save("mydata/inc_KLC.npy", klc_log)
+    np.save("mydata/inc_KLC.npy", klc_log[0])
 
     plt.clf()
     plt.plot(klc_log[1], label="KLC value per generation")
@@ -837,7 +905,7 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/sk_KLC"
     plt.savefig(save_name)
-    np.save("mydata/inc_sk_KLC.npy", klc_log)
+    np.save("mydata/inc_sk_KLC.npy", klc_log[1])
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -871,25 +939,66 @@ def AURORA_incremental_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/inc_rmse_plot"
     plt.savefig(save_name)
-    np.save("mydata/inc_rmse.npy", big_error_log)
+    np.save("mydata/inc_rmse.npy", rmse_log)
     
 
 # The only difference between the other basic ballistic task is that this is only trained once and with more samples    
 def AURORA_pretrained_ballistic_task(with_rnn):
-    init_size = 5 * POPULATION_INITIAL_SIZE            # Initial size of population
+    comparison_gt = np.load("GROUND_TRUTH.npy")
+    init_size = 100 * 100           # Initial size of population
     training_pop = []                                  # Container for training population
-    print("Creating training population container")
-    for b in range(init_size):
-        new_indiv = individual.indiv()
-        training_pop.append(new_indiv)
-    print("Complete")
 
     # Collect sensory data of the generated controllers. In the case of the ballistic task this is the trajectories but any sensory data can be considered
     # The collected sensory data makes up the first dataset
-    print("Evaluating training population")
-    for member in training_pop:
-        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+    # print("Creating and Evaluating training population")
+    # step_size = (FIT_MAX - FIT_MIN)/100
+    # genotype = [0.0, 0.0]
+
+
+    # for i in range(100):
+    #     for j in range(100):
+    #         new_indiv = individual.indiv()
+    #         new_indiv.eval(genotype)
+    #         training_pop.append(new_indiv)
+    #         genotype[1] += step_size
+    #     genotype[0] += step_size
+
+    # for member in training_pop:
+    #     genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+    #     member.eval(genotype)
+    # print("Complete")
+    # print("Creating training population")
+    # for i in range(init_size):
+    #     new_indiv = individual.indiv()
+    #     training_pop.append(new_indiv)
+
+    # print("Evaluating training population")
+    # step_size = (FIT_MAX - FIT_MIN)/100
+    # genotype = [FIT_MIN, FIT_MIN]
+    # for member in training_pop:
+    #     if genotype[1] > FIT_MAX:
+    #         genotype[1] = FIT_MIN
+    #         genotype[0] += step_size
+    #     member.eval(genotype)
+    #     genotype[1] += step_size
+    # print("Complete")
+    dim = 100
+    init_size = dim * dim           # Initial size of population
+    pop = []                        # Container for population
+    print("Creating population")
+    for i in range(init_size):
+        new_indiv = individual.indiv()
+        pop.append(new_indiv)
+    print("Complete")
+    print("Evaluating population")
+    step_size = (FIT_MAX - FIT_MIN)/dim
+    genotype = [FIT_MIN, FIT_MIN]
+    for member in pop:
+        if genotype[1] > FIT_MAX:
+            genotype[1] = FIT_MIN
+            genotype[0] += step_size
         member.eval(genotype)
+        genotype[1] += step_size
     print("Complete")
 
     # Create the dimension reduction algorithm (the Autoencoder)
@@ -960,6 +1069,13 @@ def AURORA_pretrained_ballistic_task(with_rnn):
         _max, _min = get_scaling_vars(pop)
 
         roulette_wheel = make_wheel(pop)
+        x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
+
+        if generation % 1000 == 0:
+            now = datetime.now()
+            current_time = now.strftime("%H:%M:%S")
+            print("Current Time =", current_time)
+            plot_latent_gt(pop, generation)
 
         # Begin Quality Diversity iterations
         with tf.Session() as sess:
@@ -983,68 +1099,83 @@ def AURORA_pretrained_ballistic_task(with_rnn):
                 # 2. Mutate and evaluate the chosen controller
                 new_indiv = mut_eval(controller)
 
-                new_bd = None
-                out = None
-                image = None
+                if is_indiv_legal(new_indiv, this_indiv) == True:
+                    new_bd = None
+                    out = None
+                    image = None
 
-                # 3. Get the Behavioural Descriptor for the new individual
-                if with_rnn == False:
-                    image = new_indiv.get_scaled_image(_max, _min)
-                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                else:
-                    true_image = new_indiv.get_scaled_image(_max, _min)
-                    rnn_image = new_indiv.get_lstm_embed_traj()
-                    rnn_output = sess.run((my_ae.rnn_output_image),\
-                            feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                    network_input_image = translate_image(rnn_output)
-                    new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
-                        feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                    image = true_image
+                    # 3. Get the Behavioural Descriptor for the new individual
+                    if with_rnn == False:
+                        image = new_indiv.get_scaled_image(_max, _min)
+                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    else:
+                        true_image = new_indiv.get_scaled_image(_max, _min)
+                        rnn_image = new_indiv.get_lstm_embed_traj()
+                        rnn_output = sess.run((my_ae.rnn_output_image),\
+                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        network_input_image = translate_image(rnn_output)
+                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
+                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        image = true_image
 
-                gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
+                    gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
 
+                    # 4. See if the new Behavioural Descriptor is novel enough
 
-                # 4. See if the new Behavioural Descriptor is novel enough
-                novelty, dominated = calculate_novelty(new_bd, pop, threshold, True)
+                    novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
+                    # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
+                    if dominated == -1:                           #    If the individual did not dominate another individual
+                        if novelty >= threshold:                  #    If the individual is novel
+                            new_indiv.set_bd(new_bd)
+                            new_indiv.set_novelty(novelty)
+                            pop.append(new_indiv)
 
-                # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
-                if dominated == -1:                           #    If the individual did not dominate another individual
-                    if novelty >= threshold:                  #    If the individual is novel
+                            # Increase curiosity score of individual
+                            pop[index].increase_curiosity()
+
+                        else:                                    #    If the individual is NOT novel
+                            # Decrease curiosity score of individual
+                            pop[index].decrease_curiosity()
+                    else:                                         #    If the individual dominated another individual
                         new_indiv.set_bd(new_bd)
                         new_indiv.set_novelty(novelty)
-                        pop.append(new_indiv)
+                        pop[dominated] = new_indiv
 
-                        # Increase curiosity score of individual and modify wheel
+                        # Increase curiosity score of individual
                         pop[index].increase_curiosity()
 
-                    else:                                    #    If the individual is NOT novel
-                        # Decrease curiosity score of individual and modify wheel 
-                        pop[index].decrease_curiosity()
-                else:                                         #    If the individual dominated another individual
-                    new_indiv.set_bd(new_bd)
-                    new_indiv.set_novelty(novelty)
-                    pop[dominated] = new_indiv
-
-                    # Increase curiosity score of individual and modify wheel
-                    pop[index].increase_curiosity()
-            
         # 6. For each batch/generation, record various metrics
-        current_klc, sk_current_klc = KLC(pop)
+        current_klc, sk_current_klc = KLC(pop, comparison_gt)
         klc_log[0].append(current_klc)
         klc_log[1].append(sk_current_klc)
         repertoire_size.append(len(pop))
         rmse_log.append(np.mean(gen_rmse_log))
 
 
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print("Current Time =", current_time)
+
+
     plt.clf()
-    plt.plot(klc_log, label="KLC value per generation")
+    plt.plot(klc_log[0], label="KLC value per generation")
     plt.xlabel("Generation")
     plt.ylabel("Kullback-Leibler Divergence")
     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
     save_name = "myplots/KLC"
     plt.savefig(save_name)
-    np.save("mydata/pre_KLC.npy", klc_log)
+    np.save("mydata/pre_KLC.npy", klc_log[0])
+
+    plt.clf()
+    plt.plot(klc_log[1], label="KLC value per generation")
+    plt.xlabel("Generation")
+    plt.ylabel("Kullback-Leibler Divergence")
+    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.title(title)
+    save_name = "myplots/sk_KLC"
+    plt.savefig(save_name)
+    np.save("mydata/pre_sk_KLC.npy", klc_log[1])
 
     plt.clf()
     plt.plot(repertoire_size, label="Repertoire Size")
@@ -1054,7 +1185,7 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/RepSize"
     plt.savefig(save_name)
-    np.save("mydata/pre_KLC.npy", klc_log)
+    np.save("mydata/pre_KLC.npy", repertoire_size)
     
     plot_latent_gt(pop, -1)
 
@@ -1079,9 +1210,424 @@ def AURORA_pretrained_ballistic_task(with_rnn):
     plt.title(title)
     save_name = "myplots/pre_rmse_plot"
     plt.savefig(save_name)
-    np.save("mydata/pre_rmse.npy", big_error_log) 
+    np.save("mydata/pre_rmse.npy", rmse_log) 
 
- 
+
+def Handcoded_Genotype(hand_ver):
+    # Get starting novelty threshold
+    # x20 : 0.14, x25 : 0.3 or somethinig , x22 : 0.17-0.15, x18 : 0.3
+    comparison_gt = np.load("GROUND_TRUTH.npy")
+
+    # Create actual population
+    init_size = POPULATION_INITIAL_SIZE
+    pop = []
+    new_bd = np.zeros((1, 2))
+    # latent_space = [ np.zeros((1,2)) for i in range(init_size)]
+    print("Creating population container")
+    for b in range(init_size):
+        new_indiv = individual.indiv()
+        pop.append(new_indiv)
+    print("Complete")
+    print("Evaluating population container")
+    for m in range(len(pop)):
+        genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+        pop[m].eval(genotype)
+        if hand_ver == True:
+            new_bd[0] = pop[m].get_gt()
+        else:
+            new_bd[0] = pop[m].get_key()
+        pop[m].set_bd(new_bd)
+        # if hand_ver == True:
+        #     latent_space[m][0] = pop[m].get_gt()
+        # else:
+        #     latent_space[m][0] = pop[m].get_key()
+    print("Complete")
+
+    threshold = INITIAL_NOVLETY * 21
+
+    # threshold = calculate_novelty_threshold(latent_space, False)
+    # print(threshold)
+    # threshold = INITIAL_NOVLETY * 70
+    # nov_mods = [40, 30, 25, 20, 10, 5]
+    # threshold = INITIAL_NOVLETY * 70
+    # RETRAIN_ITER = [300, 1000, 2550]
+    # nov_mods = [45, 25, 15]
+
+    # threshold = INITIAL_NOVLETY * 100
+    # RETRAIN_ITER = [750, 1550, 3150]
+    # nov_mods = [50, 30, 20]
+
+    # threshold = INITIAL_NOVLETY * 50
+    # RETRAIN_ITER = [150, 350, 750, 1550, 3150]
+    # nov_mods = [40, 30, 25, 20, 5]
+    # These are needed for the main algorithm
+    klc_log = [[], []]                              # Record my ver and the sklearn ver
+    roulette_wheel = []
+    repertoire_size = []
+    
+    nov_index = 0
+    # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
+    for generation in range(NB_QD_BATCHES):
+        # if nov_index < len(RETRAIN_ITER):
+        #     if generation == RETRAIN_ITER[nov_index]:
+        #         threshold = INITIAL_NOVLETY * nov_mods[nov_index]
+        #         # latent_space = [ np.zeros((1,2)) for i in range(len(pop)) ]
+        #         # for m in range(len(pop)):
+        #         #     if hand_ver == True:
+        #         #         latent_space[m][0] = pop[m].get_gt()
+        #         #     else:
+        #         #         latent_space[m][0] = pop[m].get_key()
+        #         # threshold = calculate_novelty_threshold(latent_space, False)
+        #         print("New threshold is " + str(threshold))
+        #         nov_index+=1
+
+        roulette_wheel = make_wheel(pop)
+        x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
+
+        if generation % 1000 == 0:
+            now = datetime.now()
+            current_time = now.strftime("%H:%M:%S")
+            print("Current Time =", current_time)
+        if generation % 500 == 0:
+            plot_gt(pop, generation)
+        
+        if generation != 0:
+            print(klc_log[0][-1])
+
+        # Begin Quality Diversity iterations
+        print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+
+        for j in range(NB_QD_ITERATIONS):
+
+            # 1. Select controller from population using curiosity proportionate selection
+            selector = random.uniform(0, 1)
+            index = 0
+            cumulative = roulette_wheel[index]
+            while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
+                index += 1
+                cumulative += roulette_wheel[index]
+            this_indiv = pop[index]
+
+            controller = this_indiv.get_key()
+
+            # 2. Mutate and evaluate the chosen controller
+            new_indiv = mut_eval(controller)
+
+            if is_indiv_legal(new_indiv, this_indiv) == True:
+                # 3. Get new Behavioural Descriptor
+                if hand_ver == True:
+                    new_bd[0] = new_indiv.get_gt()
+                else:
+                    new_bd[0] = new_indiv.get_key()
+
+                # 4. See if the new Behavioural Descriptor is novel enough
+                novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
+                # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
+                if dominated == -1:                           #    If the individual did not dominate another individual
+                    if novelty >= threshold:                  #    If the individual is novel
+                        new_indiv.set_bd(new_bd)
+                        new_indiv.set_novelty(novelty)
+                        pop.append(new_indiv)
+
+                        # Increase curiosity score of individual
+                        pop[index].increase_curiosity()
+
+                    else:                                    #    If the individual is NOT novel
+                        # Decrease curiosity score of individual
+                        pop[index].decrease_curiosity()
+                else:                                         #    If the individual dominated another individual
+                    new_indiv.set_bd(new_bd)
+                    new_indiv.set_novelty(novelty)
+                    pop[dominated] = new_indiv
+
+                    # Increase curiosity score of individual
+                    pop[index].increase_curiosity()
+
+        # 6. For each batch/generation, record various metrics
+        current_klc, sk_current_klc = KLC(pop, comparison_gt)
+        # print(current_klc)
+        klc_log[0].append(current_klc)
+        klc_log[1].append(sk_current_klc)
+        repertoire_size.append(len(pop))
+
+
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    print("Current Time =", current_time)
+
+
+    plt.clf()
+    plt.plot(klc_log[0], label="KLC value per generation")
+    plt.xlabel("Generation")
+    plt.ylabel("Kullback-Leibler Divergence")
+    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.title(title)
+    save_name = "myplots/KLC"
+    plt.savefig(save_name)
+    if hand_ver == True:
+        np.save("mydata/hand_KLC.npy", klc_log[0])
+    else:
+        np.save("mydata/geno_KLC.npy", klc_log[0])
+
+
+    plt.clf()
+    plt.plot(klc_log[1], label="KLC value per generation")
+    plt.xlabel("Generation")
+    plt.ylabel("Kullback-Leibler Divergence")
+    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
+    plt.title(title)
+    save_name = "myplots/sk_KLC"
+    plt.savefig(save_name)
+    if hand_ver == True:
+        np.save("mydata/hand_sk_KLC.npy", klc_log[0])
+    else:
+        np.save("mydata/geno_sk_KLC.npy", klc_log[0])
+
+    plt.clf()
+    plt.plot(repertoire_size, label="Repertoire Size")
+    plt.xlabel("Generation")
+    plt.ylabel("Number of controllers")
+    title = "Repertoire Size"
+    plt.title(title)
+    save_name = "myplots/RepSize"
+    plt.savefig(save_name)
+    np.save("mydata/hand_repSize.npy", repertoire_size)
+    if hand_ver == True:
+        np.save("mydata/hand_repSize.npy", klc_log[0])
+    else:
+        np.save("mydata/geno_repSize.npy", klc_log[0])
+
+    plot_gt(pop, -1)
+
+# def Genotype():
+#     comparison_gt = np.load("GROUND_TRUTH.npy")
+#     # Create actual population
+#     init_size = POPULATION_INITIAL_SIZE 
+#     latent_space = [ np.zeros((1,2)) for i in range(init_size)]
+#     pop = []
+#     new_bd = np.zeros((1, 2))
+#     print("Creating population container")
+#     for b in range(init_size):
+#         new_indiv = individual.indiv()
+#         pop.append(new_indiv)
+#     print("Complete")
+#     print("Evaluating population container")
+#     # for member in pop:
+#     #     genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+#     #     member.eval(genotype)
+#     #     new_bd[0] = member.get_key()
+#     #     member.set_bd(new_bd)
+#     for m in range(len(pop)):
+#         genotype = [random.uniform(0, 1), random.uniform(0, 1)]
+#         pop[m].eval(genotype)
+#         new_bd[0] = pop[m].get_key()
+#         pop[m].set_bd(new_bd)
+#         latent_space[m][0] = pop[m].get_key()
+#     print("Complete")
+
+#     # for member in pop:
+#     #     bd = member.get_key()
+#     #     member.set_bd(bd)
+
+#     # Record current latent space
+#     plot_latent_gt(pop, 0)
+
+#     # Calculate starting novelty threshold
+#     threshold = calculate_novelty_threshold(latent_space, False)
+
+#     # These are needed for the main algorithm
+#     klc_log = [[], []]                              # Record my ver and the sklearn ver
+#     roulette_wheel = []
+#     repertoire_size = []
+#     nov_index = 0
+#     # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
+#     for generation in range(NB_QD_BATCHES):
+#         if nov_index < len(RETRAIN_ITER):
+#             if generation == RETRAIN_ITER[nov_index]:
+#                 latent_space = [ np.zeros((1,2)) for i in range(len(pop))]
+#                 for m in range(len(pop)):
+#                     latent_space[m][0] = pop[m].get_gt()
+#                 threshold = calculate_novelty_threshold(latent_space, False)
+#                 print("New threshold is " + str(threshold))
+#                 nov_index +=1
+
+#         roulette_wheel = make_wheel(pop)
+#         x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
+
+#         if generation % 1000 == 0:
+#             now = datetime.now()
+#             current_time = now.strftime("%H:%M:%S")
+#             print("Current Time =", current_time)
+
+#         # Begin Quality Diversity iterations
+#         print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+
+#         for j in range(NB_QD_ITERATIONS):
+
+#             # 1. Select controller from population using curiosity proportionate selection
+#             selector = random.uniform(0, 1)
+#             index = 0
+#             cumulative = roulette_wheel[index]
+#             while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
+#                 index += 1
+#                 cumulative += roulette_wheel[index]
+#             this_indiv = pop[index]
+
+#             controller = this_indiv.get_key()
+
+#             # 2. Mutate and evaluate the chosen controller
+#             new_indiv = mut_eval(controller)
+
+#             if is_indiv_legal(new_indiv, this_indiv) == True:
+#                 # 3. Get new Behavioural Descriptor
+#                 new_bd[0] = new_indiv.get_key()
+
+#                 # 4. See if the new Behavioural Descriptor is novel enough
+#                 novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
+#                 # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
+#                 if dominated == -1:                           #    If the individual did not dominate another individual
+#                     if novelty >= threshold:                  #    If the individual is novel
+#                         new_indiv.set_bd(new_bd)
+#                         new_indiv.set_novelty(novelty)
+#                         pop.append(new_indiv)
+
+#                         # Increase curiosity score of individual
+#                         pop[index].increase_curiosity()
+
+#                     else:                                    #    If the individual is NOT novel
+#                         # Decrease curiosity score of individual
+#                         pop[index].decrease_curiosity()
+#                 else:                                         #    If the individual dominated another individual
+#                     new_indiv.set_bd(new_bd)
+#                     new_indiv.set_novelty(novelty)
+#                     pop[dominated] = new_indiv
+
+#                     # Increase curiosity score of individual
+#                     pop[index].increase_curiosity()
+
+#         # 6. For each batch/generation, record various metrics
+#         current_klc, sk_current_klc = KLC(pop, comparison_gt)
+#         klc_log[0].append(current_klc)
+#         klc_log[1].append(sk_current_klc)
+#         repertoire_size.append(len(pop))
+
+
+#     now = datetime.now()
+#     current_time = now.strftime("%H:%M:%S")
+#     print("Current Time =", current_time)
+
+
+#     plt.clf()
+#     plt.plot(klc_log[0], label="KLC value per generation")
+#     plt.xlabel("Generation")
+#     plt.ylabel("Kullback-Leibler Divergence")
+#     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
+#     plt.title(title)
+#     save_name = "myplots/geno_KLC"
+#     plt.savefig(save_name)
+#     np.save("mydata/geno_KLC.npy", klc_log[0])
+
+#     plt.clf()
+#     plt.plot(klc_log[1], label="KLC value per generation")
+#     plt.xlabel("Generation")
+#     plt.ylabel("Kullback-Leibler Divergence")
+#     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
+#     plt.title(title)
+#     save_name = "myplots/geno_sk_KLC"
+#     plt.savefig(save_name)
+#     np.save("mydata/geno_sk_KLC.npy", klc_log[1])
+    
+#     plot_latent_gt(pop, -1)
+
+#     plt.clf()
+#     plt.plot(repertoire_size)
+#     plt.xlabel("Generation")
+#     plt.ylabel("Repertorise Size")
+#     title = "Repertoire Size per Generation"
+#     plt.title(title)
+#     save_name = "myplots/geno_RepSize"
+#     plt.savefig(save_name)
+#     np.save("mydata/geno_rep_size.npy", repertoire_size)
+
+def get_GROUND_TRUTH():
+    dim = 125
+    init_size = dim * dim           # Initial size of population
+    pop = []                        # Container for population
+    print("Creating population")
+    for i in range(init_size):
+        new_indiv = individual.indiv()
+        pop.append(new_indiv)
+    print("Complete")
+    print("Evaluating population")
+    step_size = (FIT_MAX - FIT_MIN)/dim
+    genotype = [FIT_MIN, FIT_MIN]
+    # count = 0
+    for member in pop:
+        if genotype[1] > FIT_MAX:
+            # count += 1
+            # print("now at " + str(count))
+            genotype[1] = FIT_MIN
+            genotype[0] += step_size
+        member.eval(genotype)
+        genotype[1] += step_size
+    print("Complete")
+
+    for member in pop:
+        member.set_bd(np.array(member.get_gt()))
+    
+    print("Add viable members back to population")
+    new_pop = []
+    count = 0
+    random.shuffle(pop)
+    for member in pop:
+        if count % 1000 == 0:
+            print("At " + str(int(count/len(pop) * 100)) + "%, population is of size " + str(len(new_pop)))
+        this_bd = member.get_bd()
+        novelty, dominated = grow_pop_calculate_novelty(np.array(this_bd), new_pop, INITIAL_NOVLETY, True)
+        if dominated == -1:                           #    If the individual did not dominate another individual
+            if novelty >= INITIAL_NOVLETY:            #    If the individual is novel
+                member.set_novelty(novelty)
+                new_pop.append(member)
+        else:                                         #    If the individual dominated another individual
+            member.set_novelty(novelty)
+            new_pop[dominated] = member
+        count += 1
+
+    pop = new_pop
+    print("Size of distribution")
+    print(len(pop))
+
+    g_x = []
+    g_y = []
+
+    for member in pop:
+        this_x, this_y = member.get_gt()
+        g_x.append(this_x)
+        g_y.append(this_y)
+    
+    np.save("GROUND_TRUTH.npy", np.array([g_x, g_y]))
+    
+    t = np.arange(len(pop))
+
+    euclidean_from_zero_gt = []
+    for i in range(len(g_x)):
+        distance = g_x[i]**2 + g_y[i]**2
+        euclidean_from_zero_gt.append(distance)
+
+
+    g_x = [x for _,x in sorted(zip(euclidean_from_zero_gt, g_x))]
+    g_y = [y for _,y in sorted(zip(euclidean_from_zero_gt, g_y))]
+
+    plt.clf()
+    plt.scatter(g_x, g_y, c=t, cmap="rainbow")
+    plt.xlabel("X position at Max Height")
+    plt.ylabel("Max Height Achieved")
+    title = "The sampled ground truth distribution"
+    plt.title(title)
+    save_name = "myplots/Ground_Truth"
+    plt.savefig(save_name)
+
+
 
 if __name__ == "__main__":
     import argparse
@@ -1093,5 +1639,11 @@ if __name__ == "__main__":
         AURORA_pretrained_ballistic_task(args.with_RNN)
     elif args.version == "incremental":
         AURORA_incremental_ballistic_task(args.with_RNN)
+    elif args.version == "handcoded":
+        Handcoded_Genotype(True)
+    elif args.version == "genotype":
+        Handcoded_Genotype(False)
+    elif args.version == "GT":
+        get_GROUND_TRUTH()
     
 
