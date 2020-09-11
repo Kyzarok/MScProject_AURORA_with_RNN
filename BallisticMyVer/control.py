@@ -1,12 +1,8 @@
-# This is the control program
-# Running this runs the ballistic task
-
 import numpy as np
 import individual
 import random
 import math
 from original_ae import AE
-# from sklearn.metrics import mutual_info_score
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
@@ -48,9 +44,8 @@ CURIOSITY_OFFSET = 0.01
 
 FRAC = 0.0075
 
+# Returns the decoded LSTM outputs
 def translate_image(image):
-    # print(image.shape)
-
     decoded = np.zeros((1, 100))
     mult = int(2/FRAC)
     for i in range(50):
@@ -66,6 +61,7 @@ def translate_image(image):
 
     return decoded
 
+# Returns the max and min at each time step
 def get_scaling_vars(population):
     dims = population[0].get_traj().shape
     max_vals = [ 0.0 for i in range(dims[0]) ] 
@@ -84,19 +80,19 @@ def get_scaling_vars(population):
     min_vals = np.array(min_vals)
     return max_vals, min_vals
 
+# def make_batches(population):
+#     pop_left = len(population)
+#     num_of_full_batches = pop_left % BATCH_SIZE
+#     batches = [ [] for i in range(num_of_full_batches + 1) ]
+#     for i in range(num_of_full_batches + 1):
+#         if pop_left >= BATCH_SIZE:
+#             batches[i] = population[ i * BATCH_SIZE : (i+1) * BATCH_SIZE ]
+#         else:
+#             batches[i] = population[ i * BATCH_SIZE : i * BATCH_SIZE + pop_left ]
+#         pop_left -= BATCH_SIZE
+#     return batches
 
-def make_batches(population):
-    pop_left = len(population)
-    num_of_full_batches = pop_left % BATCH_SIZE
-    batches = [ [] for i in range(num_of_full_batches + 1) ]
-    for i in range(num_of_full_batches + 1):
-        if pop_left >= BATCH_SIZE:
-            batches[i] = population[ i * BATCH_SIZE : (i+1) * BATCH_SIZE ]
-        else:
-            batches[i] = population[ i * BATCH_SIZE : i * BATCH_SIZE + pop_left ]
-        pop_left -= BATCH_SIZE
-    return batches
-
+# Returns indices for shuffled training and validation sets
 def split_dataset(pop_size):
     val_size = int(pop_size/4)
     train_size = pop_size - val_size
@@ -111,6 +107,7 @@ def split_dataset(pop_size):
         t_v_list.append([training_indices, val_indices])
     return t_v_list
 
+# Returns indices for shuffles training set
 def dummy_split(pop_size):
     indices = [ i for i in range(pop_size)]
     t_v_list = []
@@ -121,6 +118,7 @@ def dummy_split(pop_size):
     t_v_list.append([training_indices, val_indices])
     return t_v_list
 
+# Trains the autoencoder
 def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrained):
 
     _max, _min = get_scaling_vars(population)
@@ -199,7 +197,7 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
                 t_loss_record.append(t_loss)
 
 
-                # Calcualte epoch validation loss
+                # Calculate epoch validation loss
                 if is_pretrained == False:
                     for v in validation_data:
                         member = population[v]
@@ -266,6 +264,7 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
     plt.savefig(save_name)
     return autoencoder, t_loss_record, v_loss_record
 
+# Returns current Kullback-Leibler Coverage
 def KLC(population, true_gt):
     nb_bins = 30
 
@@ -280,11 +279,11 @@ def KLC(population, true_gt):
         my_gt_1.append(gt[1])
 
     # Get normalized histograms of the data
-    l_norm_0, _, _ = plt.hist(my_gt_0, bins=nb_bins)#, density=True, stacked=True)
-    l_norm_1, _, _ = plt.hist(my_gt_1, bins=nb_bins)#, density=True, stacked=True)
+    l_norm_0, _, _ = plt.hist(my_gt_0, bins=nb_bins)
+    l_norm_1, _, _ = plt.hist(my_gt_1, bins=nb_bins)
 
-    g_norm_0, _, _ = plt.hist(true_gt_0, bins=nb_bins)#, density=True, stacked=True)
-    g_norm_1, _, _ = plt.hist(true_gt_1, bins=nb_bins)#, density=True, stacked=True)
+    g_norm_0, _, _ = plt.hist(true_gt_0, bins=nb_bins)
+    g_norm_1, _, _ = plt.hist(true_gt_1, bins=nb_bins)
 
 
     g_norm_0 /= sum(g_norm_0)
@@ -320,7 +319,8 @@ def KLC(population, true_gt):
     D_KL = (D_KL_0 + D_KL_1) / 2
     return D_KL
 
-def calculate_novelty_threshold(latent_space, with_rnn):
+# Returns new novelty threshold
+def calculate_novelty_threshold(latent_space, is_pretrained):
 
     rows = len(latent_space)
     cols = len(latent_space[0][0])
@@ -346,13 +346,15 @@ def calculate_novelty_threshold(latent_space, with_rnn):
     maxdist = np.sqrt(np.max(dist))
 
     #  arbitrary value to have a specific "resolution"
-    K = 60000
-    # if with_rnn == True:
-    #     K = 1000000
+    # K = 60000
+    K = 40000
+    # if is_pretrained == True:
+    #     K = 40000
     
     new_novelty = maxdist/np.sqrt(K)
     return new_novelty
 
+# Returns parameters needed to calculate novelty
 def make_novelty_params(population):
 
     rows = len(population)
@@ -376,7 +378,7 @@ def make_novelty_params(population):
 
     return x_squared, two_x, y_squared, two_y
 
-
+# Returns mutated individual (10% chance)
 def mut_eval(indiv_params):
     # Implements polynomial mutation
     new_indiv = individual.indiv()
@@ -397,6 +399,7 @@ def mut_eval(indiv_params):
     new_indiv.eval(new_params)
     return new_indiv
 
+# Returns True if new_guy is both different from old_guy and if new_guy is within legal bounds
 def is_indiv_legal(new_guy, old_guy):
     get_key = new_guy.get_key()
     get_parent_key = old_guy.get_key()
@@ -406,6 +409,7 @@ def is_indiv_legal(new_guy, old_guy):
             ret_type = True
     return ret_type
 
+# Check domination when re-adding to populaiton
 def grow_pop_does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, init_novelty):
     dominated_indiv = -1
     x_1_novelty = init_novelty
@@ -439,7 +443,7 @@ def grow_pop_does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, population, i
 
     return dominated_indiv, x_1_novelty
 
-    
+# Returns novelty of an individual when re-adding to population    
 def grow_pop_calculate_novelty(this_bd, population, curr_threshold, check_dominate):
     # If the population is still too small
     if len(population) < K_NEAREST_NEIGHBOURS:
@@ -475,6 +479,7 @@ def grow_pop_calculate_novelty(this_bd, population, curr_threshold, check_domina
 
         return novelty, dominated_indiv
 
+# Check domination, i.e. if domination conditions have been met
 def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, x_squared, two_x, y_squared, two_y, population):
     dominated_indiv = -1
     x_1_novelty = dist_from_k_n_n[0]
@@ -486,6 +491,7 @@ def does_dominate(curr_threshold, k_n_n, dist_from_k_n_n, x_squared, two_x, y_sq
 
     return dominated_indiv, x_1_novelty
 
+# Returns novelty of individual
 def calculate_novelty(this_bd, curr_threshold, check_dominate, x_squared, two_x, y_squared, two_y, population):
     this_bd = this_bd[0]
     two_x_new_x = two_x * this_bd[0]
@@ -515,6 +521,7 @@ def calculate_novelty(this_bd, curr_threshold, check_dominate, x_squared, two_x,
 
     return novelty, dominated_indiv
 
+# Plots the latent space and the ground truth
 def plot_latent_gt(population, when_trained, prefix):
     l_x = []
     l_y = []
@@ -573,6 +580,7 @@ def plot_latent_gt(population, when_trained, prefix):
     save_name = prefix + "/myplots/Ground_Truth_" + str(when_trained)
     plt.savefig(save_name)
 
+# Plots the ground truth only
 def plot_gt(population, when_trained, prefix):
     g_x = []
     g_y = []
@@ -628,12 +636,12 @@ def make_wheel(population):
     roulette_wheel = [ cur / roulette_sum for cur in offset_roulette_curiosities]
     return roulette_wheel
 
-
+# Runs AURORA incremental version (i.e. with retraining periods)
 def AURORA_incremental_ballistic_task(with_rnn, prefix):
     comparison_gt = np.load("GROUND_TRUTH.npy")
     # Randomly generate some controllers
     init_size = POPULATION_INITIAL_SIZE            # Initial size of population
-    pop = []                                        # Container for population
+    pop = []                                       # Container for population
     print("Creating population container")
     for b in range(init_size):
         new_indiv = individual.indiv()
@@ -641,7 +649,6 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
     print("Complete")
 
     # Collect sensory data of the generated controllers. In the case of the ballistic task this is the trajectories but any sensory data can be considered
-    # The collected sensory data makes up the first dataset
     print("Evaluating current population")
     for member in pop:
         genotype = [random.uniform(FIT_MIN, FIT_MAX), random.uniform(FIT_MIN, FIT_MAX)]
@@ -673,7 +680,6 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
                 latent_space.append(member_bd.copy())
             else:
                 true_image = member.get_scaled_image(_max, _min)
-                # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
                 rnn_image = member.get_lstm_embed_traj()
                 rnn_output = sess.run((my_ae.rnn_output_image),\
                         feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
@@ -691,7 +697,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
 
     # These are needed for the main algorithm
     network_activation = 0
-    klc_log = []                             # Record my ver and the sklearn ver
+    klc_log = []
     just_finished_training = True
     roulette_wheel = []
     repertoire_size = []
@@ -812,8 +818,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
                 # 7. Clear latent space
                 latent_space = []
 
-                # 8. Assign the members of the population the new Behavioural Descriptors
-                #    and refill the latent space
+                # 8. Assign the members of the population the new Behavioural Descriptors and refill the latent space
                 _max, _min = get_scaling_vars(pop)
                 with tf.Session() as sess:
                     model_name = prefix + "/MY_MODEL"
@@ -838,7 +843,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
                         latent_space.append(this_bd.copy())
 
                 # 9. Calculate new novelty threshold to ensure population size less than 10000
-                threshold = calculate_novelty_threshold(latent_space, with_rnn)
+                threshold = calculate_novelty_threshold(latent_space, False)
                 print("New novelty threshold is " + str(threshold))
 
                 # 10. Update population so that only members with novel bds are allowed
@@ -891,7 +896,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
     plt.title(title)
     save_name = prefix + "/myplots/RepSize"
     plt.savefig(save_name)
-    np_name = prefix + "/mydata/inc_rep_size.npy"
+    np_name = prefix + "/mydata/inc_repSize.npy"
     np.save(np_name, repertoire_size)
     
     plot_latent_gt(pop, -1, prefix)
@@ -921,7 +926,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
     np.save(np_name, rmse_log)
     
 
-# The only difference between the other basic ballistic task is that this is only trained once and with more samples    
+# Runs AURORA pretrained version, i.e. only trains autoencoder once and with more samples    
 def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     comparison_gt = np.load("GROUND_TRUTH.npy")
     # Randomly generate some controllers
@@ -990,7 +995,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     plot_latent_gt(pop, 0, prefix)
 
     # Calculate starting novelty threshold
-    threshold = calculate_novelty_threshold(latent_space, False) * 3.5
+    threshold = calculate_novelty_threshold(latent_space, True)
 
     # These are needed for the main algorithm
     klc_log = []
@@ -1013,6 +1018,9 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
             current_time = now.strftime("%H:%M:%S")
             print("Current Time =", current_time)
             plot_latent_gt(pop, generation, prefix)
+        
+        if generation != 0 and generation % 100 == 0:
+            print(klc_log[-1])
 
         # Begin Quality Diversity iterations
         with tf.Session() as sess:
@@ -1091,54 +1099,6 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     current_time = now.strftime("%H:%M:%S")
     print("Current Time =", current_time)
 
-
-    # plt.clf()
-    # plt.plot(klc_log, label="KLC value per generation")
-    # plt.xlabel("Generation")
-    # plt.ylabel("Kullback-Leibler Divergence")
-    # title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-    # plt.title(title)
-    # save_name = "myplots/KLC"
-    # plt.savefig(save_name)
-    # np.save("mydata/pre_KLC.npy", klc_log)
-
-    # plt.clf()
-    # plt.plot(repertoire_size, label="Repertoire Size")
-    # plt.xlabel("Generation")
-    # plt.ylabel("Number of controllers")
-    # title = "Repertoire Size"
-    # plt.title(title)
-    # save_name = "myplots/RepSize"
-    # plt.savefig(save_name)
-    # np.save("mydata/pre_KLC.npy", repertoire_size)
-    
-    # plot_latent_gt(pop, -1, prefix)
-
-    # plt.clf()
-    # plt.plot(big_error_log[0], label="Training Loss")
-    # plt.plot(big_error_log[1], label="Validation Loss")
-    # plt.xlabel("Epoch")
-    # plt.ylabel("Reconstruction Loss")
-    # plt.legend()
-    # title = "Reconstruction Loss"
-    # plt.title(title)
-    # save_name = "myplots/Full_loss_plot"
-    # plt.savefig(save_name)
-    # np.save("mydata/pre_error_log.npy", big_error_log)  
-
-    
-    # plt.clf()
-    # plt.plot(rmse_log)
-    # plt.xlabel("Generation")
-    # plt.ylabel("RMSE Loss")
-    # title = "Average Root Mean Squared Error per Generation"
-    # plt.title(title)
-    # save_name = "myplots/pre_rmse_plot"
-    # plt.savefig(save_name)
-    # np.save("mydata/pre_rmse.npy", rmse_log) 
-
-    ################
-
     plt.clf()
     plt.plot(klc_log, label="KLC value per generation")
     plt.xlabel("Generation")
@@ -1158,7 +1118,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     plt.title(title)
     save_name = prefix + "/myplots/RepSize"
     plt.savefig(save_name)
-    np_name = prefix + "/mydata/pre_rep_size.npy"
+    np_name = prefix + "/mydata/pre_repSize.npy"
     np.save(np_name, repertoire_size)
     
     plot_latent_gt(pop, -1, prefix)
@@ -1187,6 +1147,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     np_name = prefix + "/mydata/pre_rmse.npy"
     np.save(np_name, rmse_log)
 
+# __if__ hand_ver == True __then__ runs Handcoded version __else__ runs Genotype version
 def Handcoded_Genotype(hand_ver, prefix):
     comparison_gt = np.load("GROUND_TRUTH.npy")
 
@@ -1302,7 +1263,7 @@ def Handcoded_Genotype(hand_ver, prefix):
     plt.ylabel("Kullback-Leibler Divergence")
     title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
     plt.title(title)
-    save_name = "myplots/KLC"
+    save_name = prefix + "/myplots/KLC"
     plt.savefig(save_name)
     if hand_ver == True:
         np_name = prefix + "/mydata/hand_KLC.npy"
@@ -1331,6 +1292,7 @@ def Handcoded_Genotype(hand_ver, prefix):
     else: 
         plot_latent_gt(pop, -1, prefix)
 
+# Generates GROUND TRUTH
 def get_GROUND_TRUTH():
     dim = 125
     init_size = dim * dim           # Initial size of population
@@ -1404,20 +1366,166 @@ def get_GROUND_TRUTH():
     save_name = "myplots/Ground_Truth"
     plt.savefig(save_name)
 
+def plot_runs(ver):
+    prefix = "RUN_DATA/Handcoded"
+    np_name = prefix + "/mydata/hand_KLC.npy"
+    hand_klc = np.load(np_name)
+    np_name = prefix + "/mydata/hand_repSize.npy"
+    hand_rep = np.load(np_name)
+
+    prefix = "RUN_DATA/Genotype"
+    np_name = prefix + "/mydata/geno_KLC.npy"
+    geno_klc = np.load(np_name)
+    np_name = prefix + "/mydata/geno_repSize.npy"
+    geno_rep = np.load(np_name)
+
+    prefix = "RUN_DATA/AURORA_AE_pre"
+    np_name = prefix + "/mydata/pre_KLC.npy"
+    pre_klc = np.load(np_name)
+    np_name = prefix + "/mydata/pre_repSize.npy"
+    pre_rep = np.load(np_name)
+    np_name = prefix + "/mydata/pre_rmse.npy"
+    pre_rmse = np.load(np_name)
+
+    prefix = "RUN_DATA/AURORA_AE_inc"
+    np_name = prefix + "/mydata/inc_KLC.npy"
+    inc_klc = np.load(np_name)
+    np_name = prefix + "/mydata/inc_repSize.npy"
+    inc_rep = np.load(np_name)
+    np_name = prefix + "/mydata/inc_rmse.npy"
+    inc_rmse = np.load(np_name)
+
+
+
+    pre_LSTM_klc = None
+    pre_LSTM_rep = None
+    pre_LSTM_rmse = None
+    inc_LSTM_klc = None
+    inc_LSTM_rep = None
+    inc_LSTM_rmse = None
+
+    if ver == 2:
+        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        np_name = prefix + "/mydata/pre_KLC.npy"
+        pre_LSTM_klc = np.load(np_name)
+        np_name = prefix + "/mydata/pre_repSize.npy"
+        pre_LSTM_rep = np.load(np_name)
+        np_name = prefix + "/mydata/pre_rmse.npy"
+        pre_LSTM_rmse = np.load(np_name)
+
+        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+        np_name = prefix + "/mydata/inc_KLC.npy"
+        inc_LSTM_klc = np.load(np_name)
+        np_name = prefix + "/mydata/inc_repSize.npy"
+        inc_LSTM_rep = np.load(np_name)
+        np_name = prefix + "/mydata/inc_rmse.npy"
+        inc_LSTM_rmse = np.load(np_name)
+
+    # The KLC plot
+    plt.clf()
+    plt.plot(hand_klc, c = "k", label = "Handcoded")
+    plt.plot(geno_klc, c = "b", label = "Genotype")
+    plt.plot(pre_klc, c = "m", label = "AURORA-AE Pretrained")
+    plt.plot(inc_klc, color="orange", label = "AURORA-AE Incremental")
+    if ver == 2:
+        plt.plot(pre_LSTM_klc, c = 'r', label = "AURORA-AE-LSTM Pretrained")
+        plt.plot(inc_LSTM_klc, c = 'g', label = "AURORA-AE-LSTM Incremental")
+    plt.xlabel("Generation")
+    plt.ylabel("KLC Score")
+    title = "Kullback-Leibler Coverage Score per Generation"
+    plt.title(title)
+    plt.legend()
+    plt.savefig("BIG_KLC")
+
+    # The Repertoire Size plot
+    plt.clf()
+    plt.plot(hand_rep, c = "k", label = "Handcoded")
+    plt.plot(geno_rep, c = "b", label = "Genotype")
+    plt.plot(pre_rep, c = "m", label = "AURORA-AE Pretrained")
+    plt.plot(inc_rep, color="orange", label = "AURORA-AE Incremental")
+    if ver == 2:
+        plt.plot(pre_LSTM_rep, c = 'r', label = "AURORA-AE-LSTM Pretrained")
+        plt.plot(inc_LSTM_rep, c = 'g', label = "AURORA-AE-LSTM Incremental")
+    plt.xlabel("Generation")
+    plt.ylabel("Repertoire Size")
+    title = "Repertoire Size per Generation"
+    plt.title(title)
+    plt.legend()
+    plt.savefig("BIG_REP")
+
+    # The RMSE plot
+    plt.clf()
+    plt.plot(pre_rmse, c = "m", label = "AURORA-AE Pretrained")
+    plt.plot(inc_rmse, color="orange", label = "AURORA-AE Incremental")
+    if ver == 2:
+        plt.plot(pre_LSTM_rmse, c = 'r', label = "AURORA-AE-LSTM Pretrained")
+        plt.plot(inc_LSTM_rmse, c = 'g', label = "AURORA-AE-LSTM Incremental")
+    plt.xlabel("Generation")
+    plt.ylabel("RMS Error")
+    title = "Reconstruction Error per Generation"
+    plt.title(title)
+    plt.legend()
+    plt.savefig("BIG_RMSE")
+
+    # plt.clf()
+    # plt.plot(repertoire_size, label="Repertoire Size")
+    # plt.xlabel("Generation")
+    # plt.ylabel("Number of controllers")
+    # title = "Repertoire Size"
+    # plt.title(title)
+    # save_name = prefix + "/myplots/RepSize"
+    # plt.savefig(save_name)
+    # np_name = prefix + "/mydata/pre_repSize.npy"
+    # np.save(np_name, repertoire_size)
+    
+    # plot_latent_gt(pop, -1, prefix)
+
+    # plt.clf()
+    # plt.plot(big_error_log[0], label="Training Loss")
+    # plt.plot(big_error_log[1], label="Validation Loss")
+    # plt.xlabel("Epoch")
+    # plt.ylabel("Reconstruction Loss")
+    # plt.legend()
+    # title = "Reconstruction Loss"
+    # plt.title(title)
+    # save_name = prefix + "/myplots/Full_loss_plot"
+    # plt.savefig(save_name)
+    # np_name = prefix + "/mydata/pre_error_log.npy"
+    # np.save(np_name, big_error_log)
+
+    # plt.clf()
+    # plt.plot(rmse_log)
+    # plt.xlabel("Generation")
+    # plt.ylabel("RMSE Loss")
+    # title = "Average Root Mean Squared Error per Generation"
+    # plt.title(title)
+    # save_name = "myplots/rmse_plot"
+    # plt.savefig(save_name)
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', type=str, default='incremental', help = "Which version of AURORA-AE do you want to run? 'incremental' or 'pretrained'?")
+    parser.add_argument('--version', type=str, default='null', help = "Which version of AURORA-AE do you want to run? 'incremental' or 'pretrained'?")
     parser.add_argument('--with_RNN', type=bool, default=False, help = "Do you want to run the RNN version? 'True' or 'False'")
     parser.add_argument('--all_runs', type=bool, default=False, help = "Do you want to run the RNN version? 'True' or 'False'")
+    parser.add_argument('--plot_runs', type=int, default=0, help = "Do you want to run the RNN version? 'True' or 'False'")
     args = parser.parse_args()
 
     if args.all_runs == True:
-        print("STARTING HANDCODED")
-        prefix = "RUN_DATA/Handcoded"
-        Handcoded_Genotype(True, prefix)
+        # print("STARTING HANDCODED")
+        # prefix = "RUN_DATA/Handcoded"
+        # Handcoded_Genotype(True, prefix)
+
+
+
+        print("STARTING LSTM PRETRAINED VERSION")
+        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        AURORA_pretrained_ballistic_task(True, prefix)
+
+        print("STARTING LSTM INCREMENTAL VERSION")
+        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+        AURORA_incremental_ballistic_task(True, prefix)
 
         print("STARTING GENOTYPE")
         prefix = "RUN_DATA/Genotype"
@@ -1431,16 +1539,14 @@ if __name__ == "__main__":
         prefix = "RUN_DATA/AURORA_AE_inc"
         AURORA_incremental_ballistic_task(False, prefix)
 
-        print("STARTING LSTM PRETRAINED VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-        AURORA_pretrained_ballistic_task(True, prefix)
-
-        print("STARTING LSTM INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-        AURORA_incremental_ballistic_task(True, prefix)
 
     else:
         prefix = "CURRENT_RUN"
+        if args.plot_runs == 1:
+            plot_runs(1)
+        if args.plot_runs == 2:
+            plot_runs(2)
+
         if args.version == "pretrained":
             AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
         elif args.version == "incremental":
