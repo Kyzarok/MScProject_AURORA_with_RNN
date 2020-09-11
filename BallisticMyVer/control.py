@@ -44,6 +44,9 @@ CURIOSITY_OFFSET = 0.01
 
 FRAC = 0.0075
 
+
+NOVELTY_K = [75000, 70000, 65000, 60000, 55000, 50000, 45000]
+
 # Returns the decoded LSTM outputs
 def translate_image(image):
     decoded = np.zeros((1, 100))
@@ -320,7 +323,7 @@ def KLC(population, true_gt):
     return D_KL
 
 # Returns new novelty threshold
-def calculate_novelty_threshold(latent_space, is_pretrained):
+def calculate_novelty_threshold(latent_space, index):
 
     rows = len(latent_space)
     cols = len(latent_space[0][0])
@@ -347,7 +350,8 @@ def calculate_novelty_threshold(latent_space, is_pretrained):
 
     #  arbitrary value to have a specific "resolution"
     # K = 60000
-    K = 40000
+    # K = 50000
+    K = NOVELTY_K[index]
     # if is_pretrained == True:
     #     K = 40000
     
@@ -637,7 +641,7 @@ def make_wheel(population):
     return roulette_wheel
 
 # Runs AURORA incremental version (i.e. with retraining periods)
-def AURORA_incremental_ballistic_task(with_rnn, prefix):
+def AURORA_incremental_ballistic_task(with_rnn, prefix, nov_index):
     comparison_gt = np.load("GROUND_TRUTH.npy")
     # Randomly generate some controllers
     init_size = POPULATION_INITIAL_SIZE            # Initial size of population
@@ -843,7 +847,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
                         latent_space.append(this_bd.copy())
 
                 # 9. Calculate new novelty threshold to ensure population size less than 10000
-                threshold = calculate_novelty_threshold(latent_space, False)
+                threshold = calculate_novelty_threshold(latent_space, nov_index)
                 print("New novelty threshold is " + str(threshold))
 
                 # 10. Update population so that only members with novel bds are allowed
@@ -927,7 +931,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
     
 
 # Runs AURORA pretrained version, i.e. only trains autoencoder once and with more samples    
-def AURORA_pretrained_ballistic_task(with_rnn, prefix):
+def AURORA_pretrained_ballistic_task(with_rnn, prefix, nov_index):
     comparison_gt = np.load("GROUND_TRUTH.npy")
     # Randomly generate some controllers
     training_pop = []                               # Container for training population
@@ -995,7 +999,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     plot_latent_gt(pop, 0, prefix)
 
     # Calculate starting novelty threshold
-    threshold = calculate_novelty_threshold(latent_space, True)
+    threshold = calculate_novelty_threshold(latent_space, nov_index)
 
     # These are needed for the main algorithm
     klc_log = []
@@ -1148,7 +1152,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     np.save(np_name, rmse_log)
 
 # __if__ hand_ver == True __then__ runs Handcoded version __else__ runs Genotype version
-def Handcoded_Genotype(hand_ver, prefix):
+def Handcoded_Genotype(hand_ver, prefix, nov_index):
     comparison_gt = np.load("GROUND_TRUTH.npy")
 
     # Create population
@@ -1180,7 +1184,7 @@ def Handcoded_Genotype(hand_ver, prefix):
     # 1.25 was pretty good
     threshold = INITIAL_NOVELTY
     if hand_ver == False:
-        threshold = calculate_novelty_threshold(latent_space, False)
+        threshold = calculate_novelty_threshold(latent_space, nov_index)
 
     for generation in range(NB_QD_BATCHES):
         roulette_wheel = make_wheel(pop)
@@ -1517,46 +1521,50 @@ if __name__ == "__main__":
         # prefix = "RUN_DATA/Handcoded"
         # Handcoded_Genotype(True, prefix)
 
+        for nov in range(len(NOVELTY_K)):
+            print("WITH NOVLETY K VALUE" + str(NOVELTY_K[nov]))
+            prefix = "FIND_NOV/AURORA_AE_LSTM_pre_" + str(NOVELTY_K[nov])
+            AURORA_pretrained_ballistic_task(True, prefix, nov)
 
 
-        print("STARTING LSTM PRETRAINED VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-        AURORA_pretrained_ballistic_task(True, prefix)
+    #     print("STARTING LSTM PRETRAINED VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+    #     AURORA_pretrained_ballistic_task(True, prefix)
 
-        print("STARTING LSTM INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-        AURORA_incremental_ballistic_task(True, prefix)
+    #     print("STARTING LSTM INCREMENTAL VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+    #     AURORA_incremental_ballistic_task(True, prefix)
 
-        print("STARTING GENOTYPE")
-        prefix = "RUN_DATA/Genotype"
-        Handcoded_Genotype(False, prefix)
+    #     print("STARTING GENOTYPE")
+    #     prefix = "RUN_DATA/Genotype"
+    #     Handcoded_Genotype(False, prefix)
 
-        print("STARTING AURORA PRETRAINED VERSION")
-        prefix = "RUN_DATA/AURORA_AE_pre"
-        AURORA_pretrained_ballistic_task(False, prefix)
+    #     print("STARTING AURORA PRETRAINED VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_pre"
+    #     AURORA_pretrained_ballistic_task(False, prefix)
 
-        print("STARTING AURORA INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_inc"
-        AURORA_incremental_ballistic_task(False, prefix)
+    #     print("STARTING AURORA INCREMENTAL VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_inc"
+    #     AURORA_incremental_ballistic_task(False, prefix)
 
 
-    else:
-        prefix = "CURRENT_RUN"
-        if args.plot_runs == 1:
-            plot_runs(1)
-        if args.plot_runs == 2:
-            plot_runs(2)
+    # else:
+    #     prefix = "CURRENT_RUN"
+    #     if args.plot_runs == 1:
+    #         plot_runs(1)
+    #     if args.plot_runs == 2:
+    #         plot_runs(2)
 
-        if args.version == "pretrained":
-            AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
-        elif args.version == "incremental":
-            AURORA_incremental_ballistic_task(args.with_RNN, prefix)
-        elif args.version == "handcoded":
-            Handcoded_Genotype(True, prefix)
-        elif args.version == "genotype":
-            Handcoded_Genotype(False, prefix)
-        elif args.version == "GT":
-            get_GROUND_TRUTH()
+    #     if args.version == "pretrained":
+    #         AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
+    #     elif args.version == "incremental":
+    #         AURORA_incremental_ballistic_task(args.with_RNN, prefix)
+    #     elif args.version == "handcoded":
+    #         Handcoded_Genotype(True, prefix)
+    #     elif args.version == "genotype":
+    #         Handcoded_Genotype(False, prefix)
+    #     elif args.version == "GT":
+    #         get_GROUND_TRUTH()
 
     
 
