@@ -45,6 +45,14 @@ class indiv():
     return self.novelty
 
   def get_max_point(self):
+    # x_coords = self.cart_traj[0]
+    # y_coords self.cart_traj[1]
+    Vx = math.cos(self.theta) * self.F
+    Vy = math.sin(self.theta) * self.F - 9.81
+    Px = Vx/2.0
+    Py = Vy/2.0
+    tmax = (math.sin(self.theta) * self.F)/9.81 - 1
+    self.max_point = ([(Vx * tmax + Px ), (-9.81* 0.5 * tmax*tmax + Vy * tmax + Py)]).copy() # quick normalization
     return self.max_point
 
   def get_curiosity(self):
