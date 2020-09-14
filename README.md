@@ -1,6 +1,8 @@
 # MScProjectRepo
 Extending Autonomous Skill Discovery with Recurrent Neural Networks
 
+This work is based off of the original research done by Dr Antoine Cully from "Autonomous skill discovery with Quality-Diversity and Unsupervised Descriptors" ( https://arxiv.org/abs/1905.11874)
+
 This repo contains the original code (OriginalCode) for the ballistic task as well as my implementation (BallisticMyVer).
 
 Running the code in BallisticMyVer requires the following dependencies:
