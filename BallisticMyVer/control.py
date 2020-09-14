@@ -48,9 +48,6 @@ CURIOSITY_OFFSET = 0.0000000001
 
 FRAC = 0.0075
 
-
-# NOVELTY_K = [75000, 35000, 35000, 35000, 35000, 35000]
-
 # Returns the decoded LSTM outputs
 def translate_image(image):
     decoded = np.zeros((1, 100))
@@ -86,18 +83,6 @@ def get_scaling_vars(population):
     max_vals = np.array(max_vals)
     min_vals = np.array(min_vals)
     return max_vals, min_vals
-
-# def make_batches(population):
-#     pop_left = len(population)
-#     num_of_full_batches = pop_left % BATCH_SIZE
-#     batches = [ [] for i in range(num_of_full_batches + 1) ]
-#     for i in range(num_of_full_batches + 1):
-#         if pop_left >= BATCH_SIZE:
-#             batches[i] = population[ i * BATCH_SIZE : (i+1) * BATCH_SIZE ]
-#         else:
-#             batches[i] = population[ i * BATCH_SIZE : i * BATCH_SIZE + pop_left ]
-#         pop_left -= BATCH_SIZE
-#     return batches
 
 # Returns indices for shuffled training and validation sets
 def split_dataset(pop_size):
@@ -167,8 +152,10 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
         epoch = 0
         last_val_loss = 999999999999
 
+        num_epoch = NUM_EPOCH
+
         for training_data, validation_data in ref_dataset:
-            if total_epochs <= NUM_EPOCH * 2:
+            if total_epochs <= num_epoch * 2:
                 condition = True
                 epoch = 0
                 last_val_loss = 999999999999
@@ -180,8 +167,11 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
                 t_loss = 0.0
                 v_loss = 0.0
 
-                if (epoch % 5 == 0):
-                    print("At training epoch " + str(epoch) + ", we're " + str(int(epoch/NUM_EPOCH * 100)) + "% of the way there!")
+                if with_rnn == False:
+                    if (epoch % 5 == 0):
+                        print("At training epoch " + str(epoch) + ", we're " + str(int(epoch/num_epoch * 100)) + "% of the way there!")
+                else:
+                    print("At training epoch " + str(epoch) + ", we're " + str(int(epoch/num_epoch * 100)) + "% of the way there!")
 
                 # Actual training
                 for t in training_data:
@@ -239,7 +229,7 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
                             # Record new value to use as previous validation loss
                             last_val_loss = calc_avg_loss
 
-                if (epoch == NUM_EPOCH):
+                if (epoch == num_epoch):
                         condition = False
                 # Increase epoch counter
                 else:
@@ -352,40 +342,11 @@ def calculate_novelty_threshold(latent_space):
     maxdist = np.sqrt(np.max(dist))
 
     #  arbitrary value to have a specific "resolution"
-    # K = 60000
-    # K = 50000
-    # K = 45000
-    # if is_pretrained == True:
-    #     K = 40000
-
-    # K = 75000
     K = 60000
     
     new_novelty = maxdist/np.sqrt(K)
     return new_novelty
 
-# def alt_calc_nt(latent_space, index):
-
-#     rows = len(latent_space)
-#     cols = len(latent_space[0][0])
-#     X = np.zeros((rows, cols))
-#     for i in range(rows):
-#         for j in range(cols):
-#             X[i][j] = latent_space[i][0][j]
-#     XX = np.zeros((rows, 1))
-#     for i in range(rows):
-#         sigma = 0
-#         for j in range(cols):
-#             sigma += X[i][j]**2
-#         XX[i][0] = sigma
-#     XY = (2*X) @ X.T
-#     dist = XX @ np.ones((1, rows))
-#     dist += np.ones((rows, 1)) @ XX.T
-#     dist -= XY
-#     maxdist = np.sqrt(np.max(dist))
-#     K = NOVELTY_K[index]
-#     new_novelty = maxdist/np.sqrt(K)
-#     return new_novelty
 # Returns parameters needed to calculate novelty
 def make_novelty_params(population):
 
@@ -693,27 +654,6 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
         genotype = [random.uniform(FIT_MIN, FIT_MAX), random.uniform(FIT_MIN, FIT_MAX)]
         member.eval(genotype)
     print("Complete")
-    # pop = []                               # Container for training population
-    # a_dim = 22
-    # f_dim = 9
-    # init_size = a_dim * f_dim                           # Initial size of population
-    # print("Creating population container")
-    # for b in range(init_size):
-    #     new_indiv = individual.indiv()
-    #     pop.append(new_indiv)
-    # print("Complete")
-
-    # print("Evaluating population")
-    # step_size_0 = (FIT_MAX - FIT_MIN)/(a_dim)
-    # step_size_1 = (FIT_MAX - FIT_MIN)/(f_dim)
-    # genotype = [FIT_MIN, FIT_MIN]
-    # for member in pop:
-    #     if genotype[1] > FIT_MAX:
-    #         genotype[1] = FIT_MIN
-    #         genotype[0] += step_size_0
-    #     member.eval(genotype)
-    #     genotype[1] += step_size_1
-    # print("Complete")
 
     # Create the dimension reduction algorithm (the Autoencoder)
     print("Creating network, printing autoencoder layers")
@@ -792,7 +732,10 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
         roulette_wheel = make_wheel(pop)
         x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
 
-        if generation % 50 == 0:
+        if with_rnn == False:
+            if generation % 50 == 0:
+                print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+        else:
             print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
 
         # Begin Quality Diversity iterations
@@ -1038,28 +981,6 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
         member.eval(genotype)
     print("Complete")
 
-    # pop = []                               # Container for training population
-    # a_dim = 22
-    # f_dim = 9
-    # init_size = a_dim * f_dim                         # Initial size of population
-    # print("Creating population container")
-    # for b in range(init_size):
-    #     new_indiv = individual.indiv()
-    #     pop.append(new_indiv)
-    # print("Complete")
-
-    # print("Evaluating population")
-    # step_size_0 = (FIT_MAX - FIT_MIN)/(a_dim)
-    # step_size_1 = (FIT_MAX - FIT_MIN)/(f_dim)
-    # genotype = [FIT_MIN, FIT_MIN]
-    # for member in pop:
-    #     if genotype[1] > FIT_MAX:
-    #         genotype[1] = FIT_MIN
-    #         genotype[0] += step_size_0
-    #     member.eval(genotype)
-    #     genotype[1] += step_size_1
-    # print("Complete")
-
     _max, _min = get_scaling_vars(pop)
 
     # Create container for latent space representation
@@ -1077,7 +998,11 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 rnn_image = member.get_lstm_embed_traj()
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                rnn_output = sess.run((my_ae.rnn_output_image),\
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                network_input_image = translate_image(rnn_output)
+                member_bd = sess.run((my_ae.latent), \
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
     
@@ -1092,8 +1017,8 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     roulette_wheel = []
     repertoire_size = []
     big_error_log = [ [] for i in range(2) ]
-    big_error_log[0] = t_error
-    big_error_log[1] = v_error
+    # big_error_log[0] = t_error
+    # big_error_log[1] = v_error
     rmse_log = []
 
     print_index = 0
@@ -1111,8 +1036,13 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
         
         if generation != 0 and generation % 100 == 0:
             print(klc_log[0][-1], klc_log[1][-1])
-        if generation % 50 == 0:
+        if with_rnn == False:
+            if generation % 50 == 0:
+                print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+        else:
             print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
+
+
         # Begin Quality Diversity iterations
         with tf.Session() as sess:
             gen_rmse_log = []
@@ -1241,189 +1171,6 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     np_name = prefix + "/mydata/pre_rmse.npy"
     np.save(np_name, rmse_log)
 
-def AURORA_pre_bt(with_rnn, prefix):
-    comparison_gt = np.load("GROUND_TRUTH.npy")
-    print("Creating network, printing autoencoder layers")
-    my_ae = AE(with_rnn)
-
-    init_size = POPULATION_INITIAL_SIZE            # Initial size of population
-    pop = []                                       # Container for population
-    print("Creating population container")
-    for b in range(init_size):
-        new_indiv = individual.indiv()
-        pop.append(new_indiv)
-    print("Complete")
-    print("Evaluating current population")
-    for member in pop:
-        genotype = [random.uniform(FIT_MIN, FIT_MAX), random.uniform(FIT_MIN, FIT_MAX)]
-        member.eval(genotype)
-    print("Complete")
-
-    _max, _min = get_scaling_vars(pop)
-
-    # Create container for latent space representation
-    latent_space = []
-
-    with tf.Session() as sess:
-        model_name = prefix + "/MY_MODEL"
-        my_ae.saver.restore(sess, model_name)
-        for member in pop:
-            if with_rnn == False:
-                image = member.get_scaled_image(_max, _min)
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                member.set_bd(member_bd.copy())
-                latent_space.append(member_bd.copy())
-            else:
-                true_image = member.get_scaled_image(_max, _min)
-                rnn_image = member.get_lstm_embed_traj()
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                member.set_bd(member_bd.copy())
-                latent_space.append(member_bd.copy())
-    
-    # Record current latent space
-    plot_latent_gt(pop, 0, prefix)
-
-    # Calculate starting novelty threshold
-    threshold = calculate_novelty_threshold(latent_space)
-
-    # These are needed for the main algorithm
-    klc_log = [[], []]
-    roulette_wheel = []
-    repertoire_size = []
-    rmse_log = []
-    
-    # Main AURORA algorithm, for 5000 generations, run 200 evaluations, and retrain the network at specific generations
-    for generation in range(NB_QD_BATCHES):
-        _max, _min = get_scaling_vars(pop)
-
-        roulette_wheel = make_wheel(pop)
-        x_squared, two_x, y_squared, two_y = make_novelty_params(pop)
-
-        if generation % 1000 == 0:
-            now = datetime.now()
-            current_time = now.strftime("%H:%M:%S")
-            print("Current Time =", current_time)
-            plot_latent_gt(pop, generation, prefix)
-        
-        if generation != 0 and generation % 50 == 0:
-            print(klc_log[0][-1], klc_log[1][-1])
-            print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
-
-        # Begin Quality Diversity iterations
-        with tf.Session() as sess:
-            gen_rmse_log = []
-            model_name = prefix + "/MY_MODEL"
-            my_ae.saver.restore(sess, model_name)
-            # print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
-
-            for j in range(NB_QD_ITERATIONS):
-
-                # 1. Select controller from population using curiosity proportionate selection
-                selector = random.uniform(0, 1)
-                index = 0
-                cumulative = roulette_wheel[index]
-                while (selector >= cumulative ) and (index != len(roulette_wheel)-1):
-                    index += 1
-                    cumulative += roulette_wheel[index]
-                this_indiv = pop[index]
-
-                controller = this_indiv.get_key()
-
-                # 2. Mutate and evaluate the chosen controller
-                new_indiv = mut_eval(controller)
-
-                if is_indiv_legal(new_indiv, this_indiv) == True:
-                    new_bd = None
-                    out = None
-                    image = None
-
-                    # 3. Get the Behavioural Descriptor for the new individual
-                    if with_rnn == False:
-                        image = new_indiv.get_scaled_image(_max, _min)
-                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                    else:
-                        true_image = new_indiv.get_scaled_image(_max, _min)
-                        rnn_image = new_indiv.get_lstm_embed_traj()
-                        rnn_output = sess.run((my_ae.rnn_output_image),\
-                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                        network_input_image = translate_image(rnn_output)
-                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
-                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
-                        image = true_image
-
-                    gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
-
-                    # 4. See if the new Behavioural Descriptor is novel enough
-
-                    novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
-                    # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
-                    if dominated == -1:                           #    If the individual did not dominate another individual
-                        if novelty >= threshold:                  #    If the individual is novel
-                            new_indiv.set_bd(new_bd.copy())
-                            pop.append(new_indiv)
-
-                            # Increase curiosity score of individual
-                            pop[index].increase_curiosity()
-
-                        else:                                    #    If the individual is NOT novel
-                            # Decrease curiosity score of individual
-                            pop[index].decrease_curiosity()
-                    else:                                         #    If the individual dominated another individual
-                        new_indiv.set_bd(new_bd.copy())
-                        pop[dominated] = new_indiv
-
-                        # Increase curiosity score of individual
-                        pop[index].increase_curiosity()
-
-        # 6. For each batch/generation, record various metrics
-        current_klc_0, current_klc_1 = KLC(pop, comparison_gt)
-        klc_log[0].append(current_klc_0)
-        klc_log[1].append(current_klc_1)
-        repertoire_size.append(len(pop))
-        rmse_log.append(np.mean(gen_rmse_log))
-
-
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    print("Current Time =", current_time)
-
-    plt.clf()
-    plt.plot(klc_log[0], label="x")
-    plt.plot(klc_log[1], label="y")
-    plt.legend()
-    plt.xlabel("Generation")
-    plt.ylabel("KLC Score")
-    title = "Kullback-Leibler Coverage, KL Divergence (Ground Truth || Generated BD)"
-    plt.title(title)
-    save_name = prefix + "/myplots/KLC"
-    plt.savefig(save_name)
-    np_name = prefix + "/mydata/pre_KLC.npy"
-    np.save(np_name, klc_log)
-
-    plt.clf()
-    plt.plot(repertoire_size, label="Repertoire Size")
-    plt.xlabel("Generation")
-    plt.ylabel("Number of controllers")
-    title = "Repertoire Size"
-    plt.title(title)
-    save_name = prefix + "/myplots/RepSize"
-    plt.savefig(save_name)
-    np_name = prefix + "/mydata/pre_repSize.npy"
-    np.save(np_name, repertoire_size)
-    
-    plot_latent_gt(pop, -1, prefix)
-
-    plt.clf()
-    plt.plot(rmse_log)
-    plt.xlabel("Generation")
-    plt.ylabel("RMSE Loss")
-    title = "Average Root Mean Squared Error per Generation"
-    plt.title(title)
-    save_name = prefix + "/myplots/pre_rmse_plot"
-    plt.savefig(save_name)
-    np_name = prefix + "/mydata/pre_rmse.npy"
-    np.save(np_name, rmse_log)
-
 # __if__ hand_ver == True __then__ runs Handcoded version __else__ runs Genotype version
 def Handcoded_Genotype(hand_ver, prefix):
     comparison_gt = np.load("GROUND_TRUTH.npy")
@@ -1451,39 +1198,9 @@ def Handcoded_Genotype(hand_ver, prefix):
         latent_space[m][0] = new_bd.copy()
     print("Complete")
 
-    # pop = []                               # Container for training population
-    # a_dim = 22
-    # f_dim = 9
-    # init_size = a_dim * f_dim                          # Initial size of population
-    # new_bd = np.zeros((1, 2))
-    # print("Creating population container")
-    # for b in range(init_size):
-    #     new_indiv = individual.indiv()
-    #     pop.append(new_indiv)
-    # print("Complete")
-    # latent_space = [ np.zeros((1,2)) for i in range(len(pop))]
-    # print("Evaluating population")
-    # step_size_0 = (FIT_MAX - FIT_MIN)/(a_dim)
-    # step_size_1 = (FIT_MAX - FIT_MIN)/(f_dim)
-    # genotype = [FIT_MIN, FIT_MIN]
-    # for m in range(len(pop)):
-    #     if genotype[1] > FIT_MAX:
-    #         genotype[1] = FIT_MIN
-    #         genotype[0] += step_size_0
-    #     pop[m].eval(genotype)
-    #     genotype[1] += step_size_1
-    #     if hand_ver == True:
-    #         new_bd[0] = pop[m].get_gt()
-    #     else:
-    #         new_bd[0] = pop[m].get_key()
-    #     pop[m].set_bd(new_bd.copy())
-    #     latent_space[m][0] = new_bd.copy()
-    # print("Complete")
-
     klc_log = [[], []]
     roulette_wheel = []
     repertoire_size = []
-    # 1.25 was pretty good
     threshold = INITIAL_NOVELTY
     if hand_ver == False:
         threshold = calculate_novelty_threshold(latent_space)
@@ -1555,7 +1272,6 @@ def Handcoded_Genotype(hand_ver, prefix):
 
         # 6. For each batch/generation, record various metrics
         current_klc_0, current_klc_1 = KLC(pop, comparison_gt)
-        # print(current_klc)
         klc_log[0].append(current_klc_0)
         klc_log[1].append(current_klc_1)
         repertoire_size.append(len(pop))
@@ -1746,7 +1462,10 @@ def plot_runs(ver):
     title = "Kullback-Leibler Coverage Score of x Dimension per Generation"
     plt.title(title)
     plt.legend()
-    plt.savefig("BIG_KLC_0")
+    if ver == 1:
+        plt.savefig("original_BIG_KLC_0")
+    else:
+        plt.savefig("extension_BIG_KLC_0")
 
     plt.clf()
     plt.plot(hand_klc[1], c = "k", label = "Handcoded")
@@ -1761,7 +1480,50 @@ def plot_runs(ver):
     title = "Kullback-Leibler Coverage Score of y Dimension per Generation"
     plt.title(title)
     plt.legend()
-    plt.savefig("BIG_KLC_1")
+    if ver == 1:
+        plt.savefig("original_BIG_KLC_1")
+    else:
+        plt.savefig("extension_BIG_KLC_1")
+
+    # The average KLC plot
+    avg_hand_klc = []
+    avg_geno_klc = []
+    avg_pre_klc = []
+    avg_inc_klc = []
+    avg_pre_LSTM_klc = []
+    avg_inc_LSTM_klc = []
+    for  i in range(len(hand_klc[0])):
+        tot = hand_klc[0][i] + hand_klc[1][i]
+        avg_hand_klc.append(tot/2)
+        tot = geno_klc[0][i] + geno_klc[1][i]
+        avg_geno_klc.append(tot/2)
+        tot = pre_klc[0][i] + pre_klc[1][i]
+        avg_pre_klc.append(tot/2)
+        tot = inc_klc[0][i] + inc_klc[1][i]
+        avg_inc_klc.append(tot/2)
+        if ver == 2:
+            tot = pre_LSTM_klc[0][i] + pre_LSTM_klc[1][i]
+            avg_pre_LSTM_klc.append(tot/2)
+            tot = inc_LSTM_klc[0][i] + inc_LSTM_klc[1][i]
+            avg_inc_LSTM_klc.append(tot/2)
+
+    plt.clf()
+    plt.plot(avg_hand_klc, c = "k", label = "Handcoded")
+    plt.plot(avg_geno_klc, c = "b", label = "Genotype")
+    plt.plot(avg_pre_klc, c = "m", label = "AURORA-AE Pretrained")
+    plt.plot(avg_inc_klc, color="g", label = "AURORA-AE Incremental")
+    if ver == 2:
+        plt.plot(avg_pre_LSTM_klc, c = 'c', label = "AURORA-AE-LSTM Pretrained")
+        plt.plot(avg_inc_LSTM_klc, color="orange", label = "AURORA-AE-LSTM Incremental")
+    plt.xlabel("Generation")
+    plt.ylabel("Average KLC Score")
+    title = "Average Kullback-Leibler Coverage Score (across dimensions) per Generation"
+    plt.title(title)
+    plt.legend()
+    if ver == 1:
+        plt.savefig("original_avg_BIG_KLC")
+    else:
+        plt.savefig("extension_avg_BIG_KLC")
 
     # The Repertoire Size plot
     plt.clf()
@@ -1777,7 +1539,10 @@ def plot_runs(ver):
     title = "Repertoire Size per Generation"
     plt.title(title)
     plt.legend()
-    plt.savefig("BIG_REP")
+    if ver == 1:
+        plt.savefig("original_BIG_REP")
+    else:
+        plt.savefig("extension_BIG_REP")
 
     # The RMSE plot
     plt.clf()
@@ -1791,152 +1556,57 @@ def plot_runs(ver):
     title = "Reconstruction Error per Generation"
     plt.title(title)
     plt.legend()
-    plt.savefig("BIG_RMSE")
-
-# def other_plot_runs():
-#     pre_klc = []
-#     pre_rep = []
-#     for i in range(len(NOVELTY_K)):
-#         prefix = "FIND_NOV/AURORA_AE_pre_"+str(i)
-#         np_name = prefix + "/mydata/pre_KLC.npy"
-#         klc = np.load(np_name)
-#         pre_klc.append(klc)
-#         np_name = prefix + "/mydata/pre_repSize.npy"
-#         rep = np.load(np_name)
-#         pre_rep.append(rep)
-
-#     # The KLC plot
-#     plt.clf()
-#     for val in range(len(NOVELTY_K)):
-#         plt.plot(pre_klc[val][0], label = str(val))
-#     avg = []
-#     for i in range(len(pre_klc[0][0])):
-#         tot = 0
-#         for j in range(len(pre_klc[0])):
-#             tot += pre_klc[j][0][i]
-#         avg.append(tot/len(pre_klc[0]))
-#     plt.plot(avg, label="average")
-#     plt.xlabel("Generation")
-#     plt.ylabel("KLC Score")
-#     title = "Kullback-Leibler Coverage Score of x Dimension per Generation"
-#     plt.title(title)
-#     plt.legend()
-#     plt.savefig("FIND_NOV/FIND_NOV_KLC")
-
-#     plt.clf()
-#     for val in range(len(NOVELTY_K)):
-#         plt.plot(pre_klc[val][1], label = str(val))
-#     avg = []
-#     for i in range(len(pre_klc[0][0])):
-#         tot = 0
-#         for j in range(len(pre_klc[0])):
-#             tot += pre_klc[j][1][i]
-#         avg.append(tot/len(pre_klc[0]))
-#     plt.plot(avg, label="average")
-#     plt.xlabel("Generation")
-#     plt.ylabel("KLC Score")
-#     title = "Kullback-Leibler Coverage Score of y Dimension per Generation"
-#     plt.title(title)
-#     plt.legend()
-#     plt.savefig("FIND_NOV/FIND_NOV_KLC")
-
-#     # The Repertoire size plot
-#     for val in range(len(NOVELTY_K)):
-#         plt.plot(pre_rep[val], label = str(val))
-#     avg = []
-#     for i in range(len(pre_rep[0])):
-#         tot = 0
-#         for j in range(len(pre_rep)):
-#             tot += pre_klc[j][i]
-#         avg.append(tot/len(pre_rep))
-#     plt.plot(avg, label="average")
-#     plt.xlabel("Generation")
-#     plt.ylabel("Repertoire Size")
-#     title = "Rep Size"
-#     plt.title(title)
-#     plt.legend()
-#     plt.savefig("FIND_NOV/FIND_NOV_REP")
+    if ver == 1:
+        plt.savefig("original_BIG_RMSE")
+    else:
+        plt.savefig("extension_BIG_RMSE")
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', type=str, default='null', help = "Which version of AURORA-AE do you want to run? 'incremental' or 'pretrained'?")
     parser.add_argument('--with_RNN', type=bool, default=False, help = "Do you want to run the RNN version? 'True' or 'False'")
-    parser.add_argument('--all_runs', type=bool, default=False, help = "Do you want to run all the algorithms? 'True' or 'False'")
     parser.add_argument('--plot_runs', type=int, default=0, help = "Do you want to plot the results of all the algorithms? '0' for no, '1' for the originals, '2' for the LSTM versions")
-    parser.add_argument('--get_max_vals', type=bool, default=False, help = "Do you want to find the maximum and minimum values? 'True' or 'False'")
+    parser.add_argument('--num_epochs', type=int, default=500, help = "How many epochs do you want to run training for?")
 
     args = parser.parse_args()
 
-    if args.get_max_vals == True:
-        test_indiv = individual.indiv()
-        genotype_list = [ [0, 0], [0, 1], [1, 0], [1, 1], [0, 0.5], [0.5, 0], [0.5, 0.5], [1, 0.5], [0.5, 1] ]
-        max_coords = []
-        for g in genotype_list:
-            test_indiv.eval(g)
-            max_c = test_indiv.get_max_point()
-            max_coords.append(max_c)
-        print(max_coords)
+    if args.plot_runs == 1:
+        plot_runs(1)
+    elif args.plot_runs == 2:
+        plot_runs(2)
 
-    if args.all_runs == True:
-        # get_GROUND_TRUTH()
-
-    
-        # for count in range(0, len(NOVELTY_K)):
-        #     print("RUN " + str(count))
-        #     prefix = "FIND_NOV/AURORA_AE_pre_" + str(count)
-        #     AURORA_pre_bt(False, prefix, count)
-        # other_plot_runs()
-
-        # print("STARTING AURORA PRETRAINED VERSION")
-        # prefix = "RUN_DATA/AURORA_AE_pre"
-        # AURORA_pre_bt(False, prefix)
-
-        # print("STARTING HANDCODED")
-        # prefix = "RUN_DATA/Handcoded"
-        # Handcoded_Genotype(True, prefix)
-
-        # print("STARTING GENOTYPE")
-        # prefix = "RUN_DATA/Genotype"
-        # Handcoded_Genotype(False, prefix)
-
-        # print("STARTING AURORA PRETRAINED VERSION")
-        # prefix = "RUN_DATA/AURORA_AE_pre"
-        # AURORA_pretrained_ballistic_task(False, prefix)
-
-        # print("STARTING AURORA PRETRAINED VERSION")
-        # prefix = "RUN_DATA/AURORA_AE_pre"
-        # AURORA_pre_bt(False, prefix)
-
-        print("STARTING AURORA INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_inc"
-        AURORA_incremental_ballistic_task(False, prefix)
-
-        print("STARTING LSTM PRETRAINED VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-        AURORA_pretrained_ballistic_task(True, prefix)
-
-        print("STARTING LSTM INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-        AURORA_incremental_ballistic_task(True, prefix)
-
-    else:
-        prefix = "CURRENT_RUN"
-        if args.plot_runs == 1:
-            plot_runs(1)
-        if args.plot_runs == 2:
-            plot_runs(2)
-
-        if args.version == "pretrained":
-            AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
-        elif args.version == "incremental":
-            AURORA_incremental_ballistic_task(args.with_RNN, prefix)
-        elif args.version == "handcoded":
-            Handcoded_Genotype(True, prefix)
-        elif args.version == "genotype":
-            Handcoded_Genotype(False, prefix)
-        elif args.version == "GT":
-            get_GROUND_TRUTH()
+    if args.version == "pretrained":
+        prefix = None      
+        if args.with_RNN == False:
+            print("STARTING LSTM PRETRAINED VERSION")
+            prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        else:
+            print("STARTING INCREMENTAL VERSION")
+            prefix = "RUN_DATA/AURORA_AE_pre"
+        NUM_EPOCH = args.num_epochs
+        AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
+    elif args.version == "incremental":  
+        prefix = None      
+        if args.with_RNN == False:
+            print("STARTING LSTM INCREMENTAL VERSION")
+            prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+        else:
+            print("STARTING INCREMENTAL VERSION")
+            prefix = "RUN_DATA/AURORA_AE_inc"
+        NUM_EPOCH = args.num_epochs
+        AURORA_incremental_ballistic_task(args.with_RNN, prefix)
+    elif args.version == "handcoded":
+        print("STARTING HANDCODED")
+        prefix = "RUN_DATA/Handcoded"
+        Handcoded_Genotype(True, prefix)
+    elif args.version == "genotype":
+        print("STARTING GENOTYPE")
+        prefix = "RUN_DATA/Genotype"
+        Handcoded_Genotype(False, prefix)
+    elif args.version == "GT":
+        print("GETTING GROUND TRUTH DISTRIBUTION")
+        get_GROUND_TRUTH()
 
     
 
