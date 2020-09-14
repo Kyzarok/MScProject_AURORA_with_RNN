@@ -1017,8 +1017,8 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     roulette_wheel = []
     repertoire_size = []
     big_error_log = [ [] for i in range(2) ]
-    # big_error_log[0] = t_error
-    # big_error_log[1] = v_error
+    big_error_log[0] = t_error
+    big_error_log[1] = v_error
     rmse_log = []
 
     print_index = 0
@@ -1568,45 +1568,80 @@ if __name__ == "__main__":
     parser.add_argument('--with_RNN', type=bool, default=False, help = "Do you want to run the RNN version? 'True' or 'False'")
     parser.add_argument('--plot_runs', type=int, default=0, help = "Do you want to plot the results of all the algorithms? '0' for no, '1' for the originals, '2' for the LSTM versions")
     parser.add_argument('--num_epochs', type=int, default=500, help = "How many epochs do you want to run training for?")
+    parser.add_argument('--everything', type=bool, default=False, help = "Do you want to run my project?")
 
     args = parser.parse_args()
 
-    if args.plot_runs == 1:
-        plot_runs(1)
-    elif args.plot_runs == 2:
-        plot_runs(2)
+    if args.everything == True:
+        print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
+        get_GROUND_TRUTH()
 
-    if args.version == "pretrained":
-        prefix = None      
-        if args.with_RNN == False:
-            print("STARTING LSTM PRETRAINED VERSION")
-            prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-        else:
-            print("STARTING INCREMENTAL VERSION")
-            prefix = "RUN_DATA/AURORA_AE_pre"
-        NUM_EPOCH = args.num_epochs
-        AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
-    elif args.version == "incremental":  
-        prefix = None      
-        if args.with_RNN == False:
-            print("STARTING LSTM INCREMENTAL VERSION")
-            prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-        else:
-            print("STARTING INCREMENTAL VERSION")
-            prefix = "RUN_DATA/AURORA_AE_inc"
-        NUM_EPOCH = args.num_epochs
-        AURORA_incremental_ballistic_task(args.with_RNN, prefix)
-    elif args.version == "handcoded":
         print("STARTING HANDCODED")
         prefix = "RUN_DATA/Handcoded"
         Handcoded_Genotype(True, prefix)
-    elif args.version == "genotype":
+
         print("STARTING GENOTYPE")
         prefix = "RUN_DATA/Genotype"
         Handcoded_Genotype(False, prefix)
-    elif args.version == "GT":
-        print("GETTING GROUND TRUTH DISTRIBUTION")
-        get_GROUND_TRUTH()
+        
+        print("STARTING PRETRAINED VERSION")
+        prefix = "RUN_DATA/AURORA_AE_pre"
+        AURORA_pretrained_ballistic_task(False, prefix)
+
+        print("STARTING INCREMENTAL VERSION")
+        prefix = "RUN_DATA/AURORA_AE_inc"
+
+        AURORA_incremental_ballistic_task(False, prefix)
+
+        NUM_EPOCH = 100
+
+        print("STARTING LSTM PRETRAINED VERSION")
+        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        AURORA_pretrained_ballistic_task(True, prefix)
+        f
+        print("STARTING LSTM INCREMENTAL VERSION")
+        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+        AURORA_incremental_ballistic_task(True, prefix)
+
+        plot_runs(2)
+
+    else:
+        if args.plot_runs == 1:
+            plot_runs(1)
+        elif args.plot_runs == 2:
+            plot_runs(2)
+
+        if args.version == "pretrained":
+            prefix = None      
+            if args.with_RNN == True:
+                print("STARTING LSTM PRETRAINED VERSION")
+                prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+            else:
+                print("STARTING PRETRAINED VERSION")
+                prefix = "RUN_DATA/AURORA_AE_pre"
+            NUM_EPOCH = args.num_epochs
+            AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
+        elif args.version == "incremental":  
+            prefix = None      
+            if args.with_RNN == True:
+                print("STARTING LSTM INCREMENTAL VERSION")
+                prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+            else:
+                print("STARTING INCREMENTAL VERSION")
+                prefix = "RUN_DATA/AURORA_AE_inc"
+            NUM_EPOCH = args.num_epochs
+            AURORA_incremental_ballistic_task(args.with_RNN, prefix)
+        elif args.version == "handcoded":
+            print("STARTING HANDCODED")
+            prefix = "RUN_DATA/Handcoded"
+            Handcoded_Genotype(True, prefix)
+        elif args.version == "genotype":
+            print("STARTING GENOTYPE")
+            prefix = "RUN_DATA/Genotype"
+            Handcoded_Genotype(False, prefix)
+        elif args.version == "GT":
+            print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
+            get_GROUND_TRUTH()
 
     
 
