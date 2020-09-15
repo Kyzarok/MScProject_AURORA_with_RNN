@@ -943,6 +943,8 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     # Randomly generate some controllers
     training_pop = []                               # Container for training population
     dim = 100
+    if with_rnn == True:
+        dim = 170
     init_size = dim * dim                           # Initial size of population
     print("Creating population container")
     for b in range(init_size):
@@ -1461,11 +1463,11 @@ def plot_runs(ver):
     plt.ylabel("KLC Score")
     title = "Kullback-Leibler Coverage Score of x Dimension per Generation"
     plt.title(title)
-    plt.legend()
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     if ver == 1:
-        plt.savefig("original_BIG_KLC_0")
+        plt.savefig("original_BIG_KLC_0", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
-        plt.savefig("extension_BIG_KLC_0")
+        plt.savefig("extension_BIG_KLC_0", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
     plt.clf()
     plt.plot(hand_klc[1], c = "k", label = "Handcoded")
@@ -1479,11 +1481,11 @@ def plot_runs(ver):
     plt.ylabel("KLC Score")
     title = "Kullback-Leibler Coverage Score of y Dimension per Generation"
     plt.title(title)
-    plt.legend()
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     if ver == 1:
-        plt.savefig("original_BIG_KLC_1")
+        plt.savefig("original_BIG_KLC_1", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
-        plt.savefig("extension_BIG_KLC_1")
+        plt.savefig("extension_BIG_KLC_1", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
     # The average KLC plot
     avg_hand_klc = []
@@ -1517,13 +1519,13 @@ def plot_runs(ver):
         plt.plot(avg_inc_LSTM_klc, color="orange", label = "AURORA-AE-LSTM Incremental")
     plt.xlabel("Generation")
     plt.ylabel("Average KLC Score")
-    title = "Average Kullback-Leibler Coverage Score (across dimensions) per Generation"
+    title = "Average KLC Score (across dimensions) per Generation"
     plt.title(title)
-    plt.legend()
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     if ver == 1:
-        plt.savefig("original_avg_BIG_KLC")
+        plt.savefig("original_avg_BIG_KLC", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
-        plt.savefig("extension_avg_BIG_KLC")
+        plt.savefig("extension_avg_BIG_KLC", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
     # The Repertoire Size plot
     plt.clf()
@@ -1538,11 +1540,11 @@ def plot_runs(ver):
     plt.ylabel("Repertoire Size")
     title = "Repertoire Size per Generation"
     plt.title(title)
-    plt.legend()
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     if ver == 1:
-        plt.savefig("original_BIG_REP")
+        plt.savefig("original_BIG_REP", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
-        plt.savefig("extension_BIG_REP")
+        plt.savefig("extension_BIG_REP", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
     # The RMSE plot
     plt.clf()
@@ -1555,11 +1557,145 @@ def plot_runs(ver):
     plt.ylabel("RMS Error")
     title = "Reconstruction Error per Generation"
     plt.title(title)
-    plt.legend()
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     if ver == 1:
-        plt.savefig("original_BIG_RMSE")
+        plt.savefig("original_BIG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
-        plt.savefig("extension_BIG_RMSE")
+        plt.savefig("extension_BIG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+def fill_latent(prefix, with_rnn):
+    pop = []                               # Container for training population
+    dim = 150
+    init_size = dim * dim                           # Initial size of population
+    print("Creating population container")
+    for b in range(init_size):
+        new_indiv = individual.indiv()
+        pop.append(new_indiv)
+    print("Complete")
+
+    print("Evaluating population")
+    step_size = (FIT_MAX - FIT_MIN)/dim
+    genotype = [FIT_MIN, FIT_MIN]
+    for member in pop:
+        if genotype[1] > FIT_MAX:
+            genotype[1] = FIT_MIN
+            genotype[0] += step_size
+        member.eval(genotype)
+        genotype[1] += step_size
+    print("Complete")
+
+    _max, _min = get_scaling_vars(pop)
+    random.shuffle(pop)
+    # Create container for latent space representation
+    latent_space = []
+    my_ae = AE(with_rnn)
+    count = 0
+    with tf.Session() as sess:
+        model_name = prefix + "/MY_MODEL"
+        my_ae.saver.restore(sess, model_name)
+        for member in pop:
+            if count % 10 == 0:
+                print(count)
+            count += 1
+            if with_rnn == False:
+                image = member.get_scaled_image(_max, _min)
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                member.set_bd(member_bd.copy())
+                latent_space.append(member_bd.copy())
+            else:
+                true_image = member.get_scaled_image(_max, _min)
+                rnn_image = member.get_lstm_embed_traj()
+                rnn_output = sess.run((my_ae.rnn_output_image),\
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                network_input_image = translate_image(rnn_output)
+                member_bd = sess.run((my_ae.latent), \
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                member.set_bd(member_bd.copy())
+                latent_space.append(member_bd.copy())
+    impossible_points = []
+    pop_slice = pop[0:5].copy()
+    with tf.Session() as sess:
+        model_name = prefix + "/MY_MODEL"
+        my_ae.saver.restore(sess, model_name)
+        for member in pop_slice:
+            if with_rnn == False:
+                image = member.get_scaled_image(_max, _min)
+                image = member.shuffle_image()
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                # member.set_bd(member_bd.copy())
+                impossible_points.append(member_bd.copy())
+            else:
+                true_image = member.get_scaled_image(_max, _min)
+                rnn_image = member.get_lstm_embed_traj()
+                true_image = member.shuffle_image()
+                rnn_image = member.get_lstm_embed_traj()
+                rnn_output = sess.run((my_ae.rnn_output_image),\
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                network_input_image = translate_image(rnn_output)
+                member_bd = sess.run((my_ae.latent), \
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                # member.set_bd(member_bd.copy())
+                impossible_points.append(member_bd.copy())
+
+            
+    
+    prefix = "FILL_LATENT/INC"
+    plot_latent_gt(pop, -1, prefix)
+
+    l_x = []
+    l_y = []
+    imp_x = []
+    imp_y = []
+
+    for member in pop:
+        this_x, this_y = member.get_bd()[0]
+        l_x.append(this_x)
+        l_y.append(this_y)
+
+    for member in range(len(pop_slice)):
+        this_x, this_y = impossible_points[member][0]
+        imp_x.append(this_x)
+        imp_y.append(this_y)
+    print(imp_x, imp_y)
+
+    plt.clf()
+    plt.scatter(l_x, l_y, c="c", s=5, label="Mapped Latent Space")
+    # t = np.arange(8)
+    # plt.scatter(imp_x, imp_y, c=t, cmap="rainbow", s=30)
+    plt.scatter(imp_x[0], imp_y[0], c="r", s=30)
+    plt.scatter(imp_x[1], imp_y[1], c="g", s=30)
+    plt.scatter(imp_x[2], imp_y[2], c="b", s=30)
+    plt.scatter(imp_x[3], imp_y[3], c="k", s=30)
+    plt.scatter(imp_x[4], imp_y[4], c="m", s=30)
+    # plt.scatter(imp_x[5], imp_y[5], color="orange", s=10)
+    # plt.scatter(imp_x[6], imp_y[6], color="aqua", s=10)
+    # plt.scatter(imp_x[7], imp_y[7], color="chartreuse", s=10)
+    # plt.scatter(imp_x[8], imp_y[8], color="yellow", s=10)
+    # pop_slice = pop[0:10].copy()
+
+    plt.scatter(l_x[0], l_y[0], c="r", s=30)
+    plt.scatter(l_x[1], l_y[1], c="g", s=30)
+    plt.scatter(l_x[2], l_y[2], c="b", s=30)
+    plt.scatter(l_x[3], l_y[3], c="k", s=30)
+    plt.scatter(l_x[4], l_y[4], c="m", s=30)
+    # plt.scatter(l_x[5], l_y[5], color="orange", s=10)
+    # plt.scatter(l_x[6], l_y[6], color="aqua", s=10)
+    # plt.scatter(l_x[7], l_y[7], color="chartreuse", s=10)
+    # plt.scatter(l_x[8], l_y[8], color="yellow", s=10)
+
+
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+    plt.xlabel("Encoded dimension 1")
+    plt.ylabel("Encoded dimension 2")
+    title = None
+
+    title = "Latent Space with impossible behaviours and the originals"
+    
+    plt.title(title)
+    save_name = prefix + "/impossible_behaviours"
+    plt.savefig(save_name, bbox_extra_artists=(lgd,), bbox_inches='tight')
+
 
 if __name__ == "__main__":
     import argparse
@@ -1572,79 +1708,77 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.everything == True:
-        print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
-        get_GROUND_TRUTH()
+    
+    prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+    fill_latent(prefix, True)
 
-        print("STARTING HANDCODED")
-        prefix = "RUN_DATA/Handcoded"
-        Handcoded_Genotype(True, prefix)
+    # if args.everything == True:
+    #     print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
+    #     get_GROUND_TRUTH()
 
-        print("STARTING GENOTYPE")
-        prefix = "RUN_DATA/Genotype"
-        Handcoded_Genotype(False, prefix)
+    #     print("STARTING HANDCODED")
+    #     prefix = "RUN_DATA/Handcoded"
+    #     Handcoded_Genotype(True, prefix)
+
+    #     print("STARTING GENOTYPE")
+    #     prefix = "RUN_DATA/Genotype"
+    #     Handcoded_Genotype(False, prefix)
         
-        print("STARTING PRETRAINED VERSION")
-        prefix = "RUN_DATA/AURORA_AE_pre"
-        AURORA_pretrained_ballistic_task(False, prefix)
+    #     print("STARTING PRETRAINED VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_pre"
+    #     AURORA_pretrained_ballistic_task(False, prefix)
 
-        print("STARTING INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_inc"
+    #     print("STARTING INCREMENTAL VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_inc"
 
-        AURORA_incremental_ballistic_task(False, prefix)
+    #     AURORA_incremental_ballistic_task(False, prefix)
 
-        NUM_EPOCH = 100
+    #     NUM_EPOCH = 100
 
-        print("STARTING LSTM PRETRAINED VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-        AURORA_pretrained_ballistic_task(True, prefix)
-        f
-        print("STARTING LSTM INCREMENTAL VERSION")
-        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-        AURORA_incremental_ballistic_task(True, prefix)
+    #     print("STARTING LSTM PRETRAINED VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+    #     AURORA_pretrained_ballistic_task(True, prefix)
+        
+    #     print("STARTING LSTM INCREMENTAL VERSION")
+    #     prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+    #     AURORA_incremental_ballistic_task(True, prefix)
 
-        plot_runs(2)
+    #     plot_runs(2)
 
-    else:
-        if args.plot_runs == 1:
-            plot_runs(1)
-        elif args.plot_runs == 2:
-            plot_runs(2)
+    # else:
+    #     if args.plot_runs == 1:
+    #         plot_runs(1)
+    #     elif args.plot_runs == 2:
+    #         plot_runs(2)
 
-        if args.version == "pretrained":
-            prefix = None      
-            if args.with_RNN == True:
-                print("STARTING LSTM PRETRAINED VERSION")
-                prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-            else:
-                print("STARTING PRETRAINED VERSION")
-                prefix = "RUN_DATA/AURORA_AE_pre"
-            NUM_EPOCH = args.num_epochs
-            AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
-        elif args.version == "incremental":  
-            prefix = None      
-            if args.with_RNN == True:
-                print("STARTING LSTM INCREMENTAL VERSION")
-                prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-            else:
-                print("STARTING INCREMENTAL VERSION")
-                prefix = "RUN_DATA/AURORA_AE_inc"
-            NUM_EPOCH = args.num_epochs
-            AURORA_incremental_ballistic_task(args.with_RNN, prefix)
-        elif args.version == "handcoded":
-            print("STARTING HANDCODED")
-            prefix = "RUN_DATA/Handcoded"
-            Handcoded_Genotype(True, prefix)
-        elif args.version == "genotype":
-            print("STARTING GENOTYPE")
-            prefix = "RUN_DATA/Genotype"
-            Handcoded_Genotype(False, prefix)
-        elif args.version == "GT":
-            print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
-            get_GROUND_TRUTH()
-
-    
-
-    
-    
-
+    #     if args.version == "pretrained":
+    #         prefix = None      
+    #         if args.with_RNN == True:
+    #             print("STARTING LSTM PRETRAINED VERSION")
+    #             prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+    #         else:
+    #             print("STARTING PRETRAINED VERSION")
+    #             prefix = "RUN_DATA/AURORA_AE_pre"
+    #         NUM_EPOCH = args.num_epochs
+    #         AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
+    #     elif args.version == "incremental":  
+    #         prefix = None      
+    #         if args.with_RNN == True:
+    #             print("STARTING LSTM INCREMENTAL VERSION")
+    #             prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+    #         else:
+    #             print("STARTING INCREMENTAL VERSION")
+    #             prefix = "RUN_DATA/AURORA_AE_inc"
+    #         NUM_EPOCH = args.num_epochs
+    #         AURORA_incremental_ballistic_task(args.with_RNN, prefix)
+    #     elif args.version == "handcoded":
+    #         print("STARTING HANDCODED")
+    #         prefix = "RUN_DATA/Handcoded"
+    #         Handcoded_Genotype(True, prefix)
+    #     elif args.version == "genotype":
+    #         print("STARTING GENOTYPE")
+    #         prefix = "RUN_DATA/Genotype"
+    #         Handcoded_Genotype(False, prefix)
+    #     elif args.version == "GT":
+    #         print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
+    #         get_GROUND_TRUTH()
