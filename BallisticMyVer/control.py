@@ -180,7 +180,7 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
                         true_image = member.get_scaled_image(_max, _min)
                         rnn_image = member.get_lstm_embed_traj()
                         rnn_output = session.run((autoencoder.rnn_output_image),\
-                             feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                             feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : num_epoch})
                         network_input_image = translate_image(rnn_output)
                         _, _, loss, _, _ = session.run((autoencoder.latent, autoencoder.decoded, autoencoder.loss, autoencoder.learning_rate, autoencoder.train_step), \
                             feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
@@ -202,15 +202,15 @@ def train_ae(prefix, autoencoder, population, when_trained, with_rnn, is_pretrai
                             true_image = member.get_scaled_image(_max, _min)
                             rnn_image = member.get_lstm_embed_traj() 
                             rnn_output = session.run((autoencoder.rnn_output_image),\
-                                feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                                feed_dict={autoencoder.x : true_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : num_epoch})
                             network_input_image = translate_image(rnn_output)
                             loss = session.run((autoencoder.loss), \
-                                feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : epoch})
+                                feed_dict={autoencoder.x : network_input_image, autoencoder.new_rnn_input : rnn_image, autoencoder.true_x : true_image, autoencoder.keep_prob : 0, autoencoder.global_step : num_epoch})
                             
                             v_loss += np.mean(loss)
                         else:
                             image = member.get_scaled_image(_max, _min)
-                            loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : 300})
+                            loss = session.run((autoencoder.loss), feed_dict={autoencoder.x : image, autoencoder.keep_prob : 0, autoencoder.global_step : num_epoch})
                             v_loss += np.mean(loss)
 
                     v_loss_record.append(v_loss)
@@ -657,7 +657,7 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
 
     # Create the dimension reduction algorithm (the Autoencoder)
     print("Creating network, printing autoencoder layers")
-    my_ae = AE(with_rnn)
+    my_ae = AE(with_rnn, NUM_EPOCH)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
     my_ae, t_error, v_error = train_ae(prefix, my_ae, pop, 0, with_rnn, False)
@@ -675,17 +675,17 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
                 # Sensory data is then projected into the latent space, this is used as the behavioural descriptor
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 rnn_image = member.get_lstm_embed_traj()
                 rnn_output = sess.run((my_ae.rnn_output_image),\
-                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 network_input_image = translate_image(rnn_output)
                 member_bd = sess.run((my_ae.latent), \
-                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
     
@@ -766,15 +766,15 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
                     # 3. Get the Behavioural Descriptor for the new individual
                     if with_rnn == False:
                         image = new_indiv.get_scaled_image(_max, _min)
-                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                     else:
                         true_image = new_indiv.get_scaled_image(_max, _min)
                         rnn_image = new_indiv.get_lstm_embed_traj()
                         rnn_output = sess.run((my_ae.rnn_output_image),\
-                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                         network_input_image = translate_image(rnn_output)
                         new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
-                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                         image = true_image
 
                     gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
@@ -835,16 +835,16 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
                         this_bd = None
                         if with_rnn == False:
                             image = member.get_scaled_image(_max, _min)
-                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                            member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                             this_bd = member_bd.copy()
                         else:
                             true_image = member.get_scaled_image(_max, _min)
                             rnn_image = member.get_lstm_embed_traj()
                             rnn_output = sess.run((my_ae.rnn_output_image),\
-                                    feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                                    feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                             network_input_image = translate_image(rnn_output)
                             member_bd = sess.run((my_ae.latent), \
-                                feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                                feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                             this_bd = member_bd.copy()
 
                         member.set_bd(this_bd.copy())
@@ -965,7 +965,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
 
     # Create the dimension reduction algorithm (the Autoencoder)
     print("Creating network, printing autoencoder layers")
-    my_ae = AE(with_rnn)
+    my_ae = AE(with_rnn, NUM_EPOCH)
 
     # Train the dimension reduction algorithm (the Autoencoder) on the dataset
     my_ae, t_error, v_error = train_ae(prefix, my_ae, training_pop, 0, with_rnn, True)
@@ -994,17 +994,17 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
         for member in pop:
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 rnn_image = member.get_lstm_embed_traj()
                 rnn_output = sess.run((my_ae.rnn_output_image),\
-                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 network_input_image = translate_image(rnn_output)
                 member_bd = sess.run((my_ae.latent), \
-                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
     
@@ -1076,15 +1076,15 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
                     # 3. Get the Behavioural Descriptor for the new individual
                     if with_rnn == False:
                         image = new_indiv.get_scaled_image(_max, _min)
-                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        new_bd, out = sess.run((my_ae.latent, my_ae.decoded), feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                     else:
                         true_image = new_indiv.get_scaled_image(_max, _min)
                         rnn_image = new_indiv.get_lstm_embed_traj()
                         rnn_output = sess.run((my_ae.rnn_output_image),\
-                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                                feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                         network_input_image = translate_image(rnn_output)
                         new_bd, out = sess.run((my_ae.latent, my_ae.decoded), \
-                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                            feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                         image = true_image
 
                     gen_rmse_log.append(np.sqrt(np.mean((image - out)**2)))
@@ -1588,7 +1588,7 @@ def fill_latent(prefix, with_rnn):
     random.shuffle(pop)
     # Create container for latent space representation
     latent_space = []
-    my_ae = AE(with_rnn)
+    my_ae = AE(with_rnn, NUM_EPOCH)
     count = 0
     with tf.Session() as sess:
         model_name = prefix + "/MY_MODEL"
@@ -1599,17 +1599,17 @@ def fill_latent(prefix, with_rnn):
             count += 1
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
             else:
                 true_image = member.get_scaled_image(_max, _min)
                 rnn_image = member.get_lstm_embed_traj()
                 rnn_output = sess.run((my_ae.rnn_output_image),\
-                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 network_input_image = translate_image(rnn_output)
                 member_bd = sess.run((my_ae.latent), \
-                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 member.set_bd(member_bd.copy())
                 latent_space.append(member_bd.copy())
     impossible_points = []
@@ -1621,7 +1621,7 @@ def fill_latent(prefix, with_rnn):
             if with_rnn == False:
                 image = member.get_scaled_image(_max, _min)
                 image = member.shuffle_image()
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 # member.set_bd(member_bd.copy())
                 impossible_points.append(member_bd.copy())
             else:
@@ -1630,10 +1630,10 @@ def fill_latent(prefix, with_rnn):
                 true_image = member.shuffle_image()
                 rnn_image = member.get_lstm_embed_traj()
                 rnn_output = sess.run((my_ae.rnn_output_image),\
-                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 network_input_image = translate_image(rnn_output)
                 member_bd = sess.run((my_ae.latent), \
-                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : 300})
+                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
                 # member.set_bd(member_bd.copy())
                 impossible_points.append(member_bd.copy())
 
@@ -1709,76 +1709,76 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     
-    prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-    fill_latent(prefix, True)
+    # prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+    # fill_latent(prefix, True)
 
-    # if args.everything == True:
-    #     print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
-    #     get_GROUND_TRUTH()
+    if args.everything == True:
+        print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
+        get_GROUND_TRUTH()
 
-    #     print("STARTING HANDCODED")
-    #     prefix = "RUN_DATA/Handcoded"
-    #     Handcoded_Genotype(True, prefix)
+        print("STARTING HANDCODED")
+        prefix = "RUN_DATA/Handcoded"
+        Handcoded_Genotype(True, prefix)
 
-    #     print("STARTING GENOTYPE")
-    #     prefix = "RUN_DATA/Genotype"
-    #     Handcoded_Genotype(False, prefix)
+        print("STARTING GENOTYPE")
+        prefix = "RUN_DATA/Genotype"
+        Handcoded_Genotype(False, prefix)
         
-    #     print("STARTING PRETRAINED VERSION")
-    #     prefix = "RUN_DATA/AURORA_AE_pre"
-    #     AURORA_pretrained_ballistic_task(False, prefix)
+        print("STARTING PRETRAINED VERSION")
+        prefix = "RUN_DATA/AURORA_AE_pre"
+        AURORA_pretrained_ballistic_task(False, prefix)
 
-    #     print("STARTING INCREMENTAL VERSION")
-    #     prefix = "RUN_DATA/AURORA_AE_inc"
+        print("STARTING INCREMENTAL VERSION")
+        prefix = "RUN_DATA/AURORA_AE_inc"
 
-    #     AURORA_incremental_ballistic_task(False, prefix)
+        AURORA_incremental_ballistic_task(False, prefix)
 
-    #     NUM_EPOCH = 100
+        NUM_EPOCH = 100
 
-    #     print("STARTING LSTM PRETRAINED VERSION")
-    #     prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-    #     AURORA_pretrained_ballistic_task(True, prefix)
+        print("STARTING LSTM PRETRAINED VERSION")
+        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        AURORA_pretrained_ballistic_task(True, prefix)
         
-    #     print("STARTING LSTM INCREMENTAL VERSION")
-    #     prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-    #     AURORA_incremental_ballistic_task(True, prefix)
+        print("STARTING LSTM INCREMENTAL VERSION")
+        prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+        AURORA_incremental_ballistic_task(True, prefix)
 
-    #     plot_runs(2)
+        plot_runs(2)
 
-    # else:
-    #     if args.plot_runs == 1:
-    #         plot_runs(1)
-    #     elif args.plot_runs == 2:
-    #         plot_runs(2)
+    else:
+        if args.plot_runs == 1:
+            plot_runs(1)
+        elif args.plot_runs == 2:
+            plot_runs(2)
 
-    #     if args.version == "pretrained":
-    #         prefix = None      
-    #         if args.with_RNN == True:
-    #             print("STARTING LSTM PRETRAINED VERSION")
-    #             prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
-    #         else:
-    #             print("STARTING PRETRAINED VERSION")
-    #             prefix = "RUN_DATA/AURORA_AE_pre"
-    #         NUM_EPOCH = args.num_epochs
-    #         AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
-    #     elif args.version == "incremental":  
-    #         prefix = None      
-    #         if args.with_RNN == True:
-    #             print("STARTING LSTM INCREMENTAL VERSION")
-    #             prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-    #         else:
-    #             print("STARTING INCREMENTAL VERSION")
-    #             prefix = "RUN_DATA/AURORA_AE_inc"
-    #         NUM_EPOCH = args.num_epochs
-    #         AURORA_incremental_ballistic_task(args.with_RNN, prefix)
-    #     elif args.version == "handcoded":
-    #         print("STARTING HANDCODED")
-    #         prefix = "RUN_DATA/Handcoded"
-    #         Handcoded_Genotype(True, prefix)
-    #     elif args.version == "genotype":
-    #         print("STARTING GENOTYPE")
-    #         prefix = "RUN_DATA/Genotype"
-    #         Handcoded_Genotype(False, prefix)
-    #     elif args.version == "GT":
-    #         print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
-    #         get_GROUND_TRUTH()
+        if args.version == "pretrained":
+            prefix = None      
+            if args.with_RNN == True:
+                print("STARTING LSTM PRETRAINED VERSION")
+                prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+            else:
+                print("STARTING PRETRAINED VERSION")
+                prefix = "RUN_DATA/AURORA_AE_pre"
+            NUM_EPOCH = args.num_epochs
+            AURORA_pretrained_ballistic_task(args.with_RNN, prefix)
+        elif args.version == "incremental":  
+            prefix = None      
+            if args.with_RNN == True:
+                print("STARTING LSTM INCREMENTAL VERSION")
+                prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
+            else:
+                print("STARTING INCREMENTAL VERSION")
+                prefix = "RUN_DATA/AURORA_AE_inc"
+            NUM_EPOCH = args.num_epochs
+            AURORA_incremental_ballistic_task(args.with_RNN, prefix)
+        elif args.version == "handcoded":
+            print("STARTING HANDCODED")
+            prefix = "RUN_DATA/Handcoded"
+            Handcoded_Genotype(True, prefix)
+        elif args.version == "genotype":
+            print("STARTING GENOTYPE")
+            prefix = "RUN_DATA/Genotype"
+            Handcoded_Genotype(False, prefix)
+        elif args.version == "GT":
+            print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
+            get_GROUND_TRUTH()

@@ -14,8 +14,9 @@ from original_my_nn_lib import LSTM_layer
 
 class AE(object):
     
-    def __init__(self, with_rnn):
+    def __init__(self, with_rnn, num_epoch):
         # Same settings for both networks
+        self.n_epoch = num_epoch
         self.traj_length = 50
         self.latent_dim = 2
         self.global_step = tf.placeholder(tf.int32, shape=(), name="step_id")
@@ -35,7 +36,7 @@ class AE(object):
         self.saver = tf.train.Saver(tf.trainable_variables())
 
     def create_optimizer(self):
-        self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, 300, 0.9,name="learning_rate")
+        self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, self.n_epoch, 0.9,name="learning_rate")
         optimizer=tf.train.AdagradOptimizer(self.learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(self.loss))
         gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
