@@ -5,6 +5,8 @@ This work is based off of the original research done by Dr Antoine Cully from "A
 
 This repo contains the original code (OriginalCode) for the ballistic task as well as my implementation (BallisticMyVer).
 
+When running this code beware that when plots and data are saved they will overwrite whatever is currenlty inside the RUN_DATA folder.
+
 Running the code in BallisticMyVer requires the following dependencies:
 * Tensorflow version 1
 * numpy
