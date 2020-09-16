@@ -1,6 +1,8 @@
 # MScProjectRepo
 Extending Autonomous Skill Discovery with Recurrent Neural Networks
 
+Project Supervisors: Dr Danesh Tarapore, Dr David Bossens
+
 ""How do robots learn?" This is a question that the fields of Bio-Inspired AI and Behaviour Based Robotics have tried to answer for a long time. Though there are many answers to the question, they all come with caveats. In \cite{AuroraQD}, the author answers the specific problem of autonomous learning by proposing a universal algorithm for robotic skill discovery without user input. They do this by exploiting an autoencoder's ability to compress large scale sensory information into low dimensional space that can be explored using evolutionary algorithms. This report covers an extension to that work by adding on a recurrent neural network with the hopes that the system will train to account for time dependent information."
 
 This work is based off of the original research done by Dr Antoine Cully from "Autonomous skill discovery with Quality-Diversity and Unsupervised Descriptors" ( https://arxiv.org/abs/1905.11874)
