@@ -250,7 +250,6 @@ class Conv2Dtranspose(object):
 
 class LSTM_layer(object):
     def __init__(self, input):
-        # 10^-3
         self.frac = 0.0075
         self.mult = int(2/self.frac)
         self.n_input = 50
@@ -259,7 +258,7 @@ class LSTM_layer(object):
         self.vocab_size = (self.mult * (self.mult + 1)) + self.mult
 
         # number of units in RNN cell
-        self.n_hidden = 128 # STANDARD VALUE
+        self.n_hidden = 128
 
         # RNN output node weights and biases
         self.weights = tf.Variable(xavier_init([self.n_hidden, self.vocab_size]), trainable=True)
@@ -271,7 +270,7 @@ class LSTM_layer(object):
         # Generate a n_input-element sequence of inputs
         self.input_x = tf.split(input_x, self.n_input,1)
 
-        # 1-layer LSTM with n_hidden units.
+        # 1-layer LSTM with n_hidden units
         self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(self.n_hidden)
 
     def output(self):

@@ -24,16 +24,6 @@ PRINT_ITER = [0, 50, 150, 350, 750, 1550, 3150]
 NB_QD_ITERATIONS = 200
 NB_QD_BATCHES = 5000
 
-
-# NB_QD_BATCHES = 700
-# NUM_EPOCH = 100
-
-# Params much lower for testing purposes
-# NB_QD_BATCHES = 40
-# RETRAIN_ITER = [10, 20, 30]
-# POPULATION_INITIAL_SIZE = 5000
-# NUM_EPOCH = 1
-
 MUTATION_RATE = 0.1
 ETA = 10
 EPSILON = 0.1
@@ -341,7 +331,9 @@ def calculate_novelty_threshold(latent_space):
 
     maxdist = np.sqrt(np.max(dist))
 
-    #  arbitrary value to have a specific "resolution"
+    # Arbitrary value to have a specific "resolution"
+    # Increase to decrease novelty threshold and make it easier to add individuals
+    # Decrease to increase novelty threshold and make it harder to add indiivduals
     K = 60000
     
     new_novelty = maxdist/np.sqrt(K)
@@ -986,6 +978,7 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     # Create container for latent space representation
     latent_space = []
 
+    # Set BDs and fill latent space
     with tf.Session() as sess:
         model_name = prefix + "/MY_MODEL"
         my_ae.saver.restore(sess, model_name)
@@ -1048,7 +1041,6 @@ def AURORA_pretrained_ballistic_task(with_rnn, prefix):
             gen_rmse_log = []
             model_name = prefix + "/MY_MODEL"
             my_ae.saver.restore(sess, model_name)
-            # print("Generation " + str(generation) + ", current size of population is " + str(len(pop)))
 
             for j in range(NB_QD_ITERATIONS):
 
@@ -1250,7 +1242,6 @@ def Handcoded_Genotype(hand_ver, prefix):
 
                 # 4. See if the new Behavioural Descriptor is novel enough
                 novelty, dominated = calculate_novelty(new_bd, threshold, True, x_squared, two_x, y_squared, two_y, pop)
-                # print(novelty)
                 # 5. If the new individual has novel behaviour, add it to the population and the BD to the latent space
                 if dominated == -1:                           #    If the individual did not dominate another individual
                     if novelty >= threshold:                  #    If the individual is novel
@@ -1318,7 +1309,7 @@ def Handcoded_Genotype(hand_ver, prefix):
     else: 
         plot_latent_gt(pop, -1, prefix)
 
-# Generates GROUND TRUTH
+# Generates GROUND TRUTH distribution used as reference to compare other distributions
 def get_GROUND_TRUTH():
     dim = 300
     init_size = dim * dim           # Initial size of population
@@ -1449,23 +1440,6 @@ def plot_runs(ver):
         np_name = prefix + "/mydata/inc_rmse.npy"
         inc_LSTM_rmse = np.load(np_name)
 
-
-    prefix = "pre_bigger_set"
-    np_name = prefix + "/mydata/pre_KLC.npy"
-    alt_pre_1_klc = np.load(np_name)
-    np_name = prefix + "/mydata/pre_repSize.npy"
-    alt_pre_1_rep = np.load(np_name)
-    np_name = prefix + "/mydata/pre_rmse.npy"
-    alt_pre_1_rmse = np.load(np_name)
-
-    prefix = "pre_more_train"
-    np_name = prefix + "/mydata/pre_KLC.npy"
-    alt_pre_2_klc = np.load(np_name)
-    np_name = prefix + "/mydata/pre_repSize.npy"
-    alt_pre_2_rep = np.load(np_name)
-    np_name = prefix + "/mydata/pre_rmse.npy"
-    alt_pre_2_rmse = np.load(np_name)
-
     # The KLC plots
     plt.clf()
     plt.plot(hand_klc[0], c = "k", label = "Handcoded", alpha = 0.7)
@@ -1475,8 +1449,6 @@ def plot_runs(ver):
     if ver == 2:
         plt.plot(pre_LSTM_klc[0], color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha = 0.7)
         plt.plot(inc_LSTM_klc[0], color="orange", label = "AURORA-AE-LSTM Incremental", alpha = 0.7)
-        plt.plot(alt_pre_1_klc[0], c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
-        plt.plot(alt_pre_2_klc[0], color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("KLC Score")
     title = "Kullback-Leibler Coverage Score of x Dimension per Generation"
@@ -1495,8 +1467,6 @@ def plot_runs(ver):
     if ver == 2:
         plt.plot(pre_LSTM_klc[1], color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha = 0.7)
         plt.plot(inc_LSTM_klc[1], color="orange", label = "AURORA-AE-LSTM Incremental", alpha = 0.7)
-        plt.plot(alt_pre_1_klc[1], c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
-        plt.plot(alt_pre_2_klc[1], color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("KLC Score")
     title = "Kullback-Leibler Coverage Score of y Dimension per Generation"
@@ -1514,8 +1484,6 @@ def plot_runs(ver):
     avg_inc_klc = []
     avg_pre_LSTM_klc = []
     avg_inc_LSTM_klc = []
-    alt_pre_1_avg_klc = []
-    alt_pre_2_avg_klc = []
     for  i in range(len(hand_klc[0])):
         tot = hand_klc[0][i] + hand_klc[1][i]
         avg_hand_klc.append(tot/2)
@@ -1531,12 +1499,6 @@ def plot_runs(ver):
             tot = inc_LSTM_klc[0][i] + inc_LSTM_klc[1][i]
             avg_inc_LSTM_klc.append(tot/2)
 
-            tot = alt_pre_1_klc[0][i] + alt_pre_1_klc[1][i]
-            alt_pre_1_avg_klc.append(tot/2)
-           
-            tot = alt_pre_2_klc[0][i] + alt_pre_2_klc[1][i]
-            alt_pre_2_avg_klc.append(tot/2)
-
     plt.clf()
     plt.plot(avg_hand_klc, c = "k", label = "Handcoded", alpha = 0.7)
     plt.plot(avg_geno_klc, c = "b", label = "Genotype", alpha = 0.7)
@@ -1545,8 +1507,6 @@ def plot_runs(ver):
     if ver == 2:
         plt.plot(avg_pre_LSTM_klc, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha = 0.7)
         plt.plot(avg_inc_LSTM_klc, color="orange", label = "AURORA-AE-LSTM Incremental", alpha = 0.7)
-        plt.plot(alt_pre_1_avg_klc, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
-        plt.plot(alt_pre_2_avg_klc, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("Average KLC Score")
     title = "Average KLC Score (across dimensions) per Generation"
@@ -1566,8 +1526,6 @@ def plot_runs(ver):
     if ver == 2:
         plt.plot(pre_LSTM_rep, color="aqua", label = "AURORA-AE-LSTM Pretrained")
         plt.plot(inc_LSTM_rep, color="orange", label = "AURORA-AE-LSTM Incremental")
-        plt.plot(alt_pre_1_rep, c = 'r', label = "LSTM Pre with more data")
-        plt.plot(alt_pre_2_rep, color = 'chartreuse', label = "LSTM Pre with more training")
     plt.xlabel("Generation")
     plt.ylabel("Repertoire Size")
     title = "Repertoire Size per Generation"
@@ -1585,8 +1543,6 @@ def plot_runs(ver):
     if ver == 2:
         plt.plot(pre_LSTM_rmse, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
         plt.plot(inc_LSTM_rmse, color="orange", label = "AURORA-AE-LSTM Incremental", alpha=0.7)
-        plt.plot(alt_pre_1_rmse, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
-        plt.plot(alt_pre_2_rmse, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("RMS Error")
     title = "Reconstruction Error per Generation"
@@ -1602,8 +1558,6 @@ def plot_runs(ver):
     inc_avg_rmse = [ 0 for x in range(i) ]
     pre_LSTM_avg_rmse = [ 0 for x in range(i) ]
     inc_LSTM_avg_rmse = [ 0 for x in range(i) ]
-    alt_pre_1_avg_rmse = [ 0 for x in range(i) ]
-    alt_pre_2_avg_rmse = [ 0 for x in range(i) ]
 
 
     pre_ex_avg_klc = [ 0 for x in range(i) ]
@@ -1612,8 +1566,6 @@ def plot_runs(ver):
     geno_ex_avg_klc = [ 0 for x in range(i) ]
     pre_LSTM_ex_avg_klc = [ 0 for x in range(i) ]
     inc_LSTM_ex_avg_klc = [ 0 for x in range(i) ]
-    alt_pre_1_ex_avg_klc = [ 0 for x in range(i) ]
-    alt_pre_2_ex_avg_klc = [ 0 for x in range(i) ]
 
     for index in range(4950):
         pre_avg_rmse.append(np.mean(pre_rmse[index : index + 50]))
@@ -1627,13 +1579,9 @@ def plot_runs(ver):
 
             pre_LSTM_avg_rmse.append(np.mean(pre_LSTM_rmse[index : index + 50]))
             inc_LSTM_avg_rmse.append(np.mean(inc_LSTM_rmse[index : index + 50]))
-            alt_pre_1_avg_rmse.append(np.mean(alt_pre_1_rmse[index : index + 50]))
-            alt_pre_2_avg_rmse.append(np.mean(alt_pre_2_rmse[index : index + 50]))
 
             pre_LSTM_ex_avg_klc.append(np.mean(avg_pre_LSTM_klc[index : index + 50]))
             inc_LSTM_ex_avg_klc.append(np.mean(avg_inc_LSTM_klc[index : index + 50]))
-            alt_pre_1_ex_avg_klc.append(np.mean(alt_pre_1_avg_klc[index : index + 50]))
-            alt_pre_2_ex_avg_klc.append(np.mean(alt_pre_2_avg_klc[index : index + 50]))
     
     plt.clf()
     plt.plot(pre_avg_rmse, c = "m", label = "AURORA-AE Pretrained", alpha=0.7)
@@ -1641,8 +1589,6 @@ def plot_runs(ver):
     if ver == 2:
         plt.plot(pre_LSTM_avg_rmse, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
         plt.plot(inc_LSTM_avg_rmse, color="orange", label = "AURORA-AE-LSTM Incremental", alpha=0.7)
-        plt.plot(alt_pre_1_avg_rmse, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
-        plt.plot(alt_pre_2_avg_rmse, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("Average RMS Error")
     plt.xlim(50, 5000)
@@ -1655,16 +1601,13 @@ def plot_runs(ver):
         plt.savefig("extension_BIG_AVG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
     plt.clf()
-    plt.plot(pre_ex_avg_klc, c = "m", label = "AURORA-AE Pretrained", alpha=0.7)
-    plt.plot(inc_ex_avg_klc, c = "g", label = "AURORA-AE Incremental", alpha=0.7)
-
     plt.plot(hand_ex_avg_klc, c = "k", label = "Handcoded", alpha=0.7)
     plt.plot(geno_ex_avg_klc, c = "b", label = "Genotype", alpha=0.7)
+    plt.plot(pre_ex_avg_klc, c = "m", label = "AURORA-AE Pretrained", alpha=0.7)
+    plt.plot(inc_ex_avg_klc, c = "g", label = "AURORA-AE Incremental", alpha=0.7)
     if ver == 2:
         plt.plot(pre_LSTM_ex_avg_klc, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
         plt.plot(inc_LSTM_ex_avg_klc, color="orange", label = "AURORA-AE-LSTM Incremental", alpha=0.7)
-        plt.plot(alt_pre_1_ex_avg_klc, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
-        plt.plot(alt_pre_2_ex_avg_klc, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("Average KLC Score across dimensions")
     plt.xlim(50, 5000)
@@ -1676,140 +1619,6 @@ def plot_runs(ver):
     else:
         plt.savefig("extension_BIG_EX_AVG_KLC", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
-def fill_latent(prefix, with_rnn):
-    pop = []                               # Container for training population
-    dim = 150
-    init_size = dim * dim                           # Initial size of population
-    print("Creating population container")
-    for b in range(init_size):
-        new_indiv = individual.indiv()
-        pop.append(new_indiv)
-    print("Complete")
-
-    print("Evaluating population")
-    step_size = (FIT_MAX - FIT_MIN)/dim
-    genotype = [FIT_MIN, FIT_MIN]
-    for member in pop:
-        if genotype[1] > FIT_MAX:
-            genotype[1] = FIT_MIN
-            genotype[0] += step_size
-        member.eval(genotype)
-        genotype[1] += step_size
-    print("Complete")
-
-    _max, _min = get_scaling_vars(pop)
-    random.shuffle(pop)
-    # Create container for latent space representation
-    latent_space = []
-    my_ae = AE(with_rnn, NUM_EPOCH)
-    count = 0
-    with tf.Session() as sess:
-        model_name = prefix + "/MY_MODEL"
-        my_ae.saver.restore(sess, model_name)
-        for member in pop:
-            if count % 10 == 0:
-                print(count)
-            count += 1
-            if with_rnn == False:
-                image = member.get_scaled_image(_max, _min)
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
-                member.set_bd(member_bd.copy())
-                latent_space.append(member_bd.copy())
-            else:
-                true_image = member.get_scaled_image(_max, _min)
-                rnn_image = member.get_lstm_embed_traj()
-                rnn_output = sess.run((my_ae.rnn_output_image),\
-                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
-                network_input_image = translate_image(rnn_output)
-                member_bd = sess.run((my_ae.latent), \
-                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
-                member.set_bd(member_bd.copy())
-                latent_space.append(member_bd.copy())
-    impossible_points = []
-    pop_slice = pop[0:5].copy()
-    with tf.Session() as sess:
-        model_name = prefix + "/MY_MODEL"
-        my_ae.saver.restore(sess, model_name)
-        for member in pop_slice:
-            if with_rnn == False:
-                image = member.get_scaled_image(_max, _min)
-                image = member.shuffle_image()
-                member_bd = sess.run(my_ae.latent, feed_dict={my_ae.x : image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
-                # member.set_bd(member_bd.copy())
-                impossible_points.append(member_bd.copy())
-            else:
-                true_image = member.get_scaled_image(_max, _min)
-                rnn_image = member.get_lstm_embed_traj()
-                true_image = member.shuffle_image()
-                rnn_image = member.get_lstm_embed_traj()
-                rnn_output = sess.run((my_ae.rnn_output_image),\
-                        feed_dict={my_ae.x : true_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
-                network_input_image = translate_image(rnn_output)
-                member_bd = sess.run((my_ae.latent), \
-                    feed_dict={my_ae.x : network_input_image, my_ae.new_rnn_input : rnn_image, my_ae.true_x : true_image, my_ae.keep_prob : 0, my_ae.global_step : NUM_EPOCH})
-                # member.set_bd(member_bd.copy())
-                impossible_points.append(member_bd.copy())
-
-            
-    
-    prefix = "FILL_LATENT/INC"
-    plot_latent_gt(pop, -1, prefix)
-
-    l_x = []
-    l_y = []
-    imp_x = []
-    imp_y = []
-
-    for member in pop:
-        this_x, this_y = member.get_bd()[0]
-        l_x.append(this_x)
-        l_y.append(this_y)
-
-    for member in range(len(pop_slice)):
-        this_x, this_y = impossible_points[member][0]
-        imp_x.append(this_x)
-        imp_y.append(this_y)
-    print(imp_x, imp_y)
-
-    plt.clf()
-    plt.scatter(l_x, l_y, c="c", s=5, label="Mapped Latent Space")
-    # t = np.arange(8)
-    # plt.scatter(imp_x, imp_y, c=t, cmap="rainbow", s=30)
-    plt.scatter(imp_x[0], imp_y[0], c="r", s=30)
-    plt.scatter(imp_x[1], imp_y[1], c="g", s=30)
-    plt.scatter(imp_x[2], imp_y[2], c="b", s=30)
-    plt.scatter(imp_x[3], imp_y[3], c="k", s=30)
-    plt.scatter(imp_x[4], imp_y[4], c="m", s=30)
-    # plt.scatter(imp_x[5], imp_y[5], color="orange", s=10)
-    # plt.scatter(imp_x[6], imp_y[6], color="aqua", s=10)
-    # plt.scatter(imp_x[7], imp_y[7], color="chartreuse", s=10)
-    # plt.scatter(imp_x[8], imp_y[8], color="yellow", s=10)
-    # pop_slice = pop[0:10].copy()
-
-    plt.scatter(l_x[0], l_y[0], c="r", s=30)
-    plt.scatter(l_x[1], l_y[1], c="g", s=30)
-    plt.scatter(l_x[2], l_y[2], c="b", s=30)
-    plt.scatter(l_x[3], l_y[3], c="k", s=30)
-    plt.scatter(l_x[4], l_y[4], c="m", s=30)
-    # plt.scatter(l_x[5], l_y[5], color="orange", s=10)
-    # plt.scatter(l_x[6], l_y[6], color="aqua", s=10)
-    # plt.scatter(l_x[7], l_y[7], color="chartreuse", s=10)
-    # plt.scatter(l_x[8], l_y[8], color="yellow", s=10)
-
-
-    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-
-    plt.xlabel("Encoded dimension 1")
-    plt.ylabel("Encoded dimension 2")
-    title = None
-
-    title = "Latent Space with impossible behaviours and the originals"
-    
-    plt.title(title)
-    save_name = prefix + "/impossible_behaviours"
-    plt.savefig(save_name, bbox_extra_artists=(lgd,), bbox_inches='tight')
-
-
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -1820,10 +1629,6 @@ if __name__ == "__main__":
     parser.add_argument('--everything', type=bool, default=False, help = "Do you want to run my project?")
 
     args = parser.parse_args()
-
-    
-    # prefix = "RUN_DATA/AURORA_AE_LSTM_inc"
-    # fill_latent(prefix, True)
 
     if args.everything == True:
         print("GENERATE REFERENCE GROUND TRUTH DISTRIBUTION")
