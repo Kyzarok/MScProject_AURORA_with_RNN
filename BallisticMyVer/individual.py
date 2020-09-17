@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import random
 
 M = 1.0
 NB_STEP = 50
@@ -93,7 +94,16 @@ class indiv():
       ret[0][i] = int(this_a + this_b)
     return ret
 
-
+  def shuffle_image(self):
+    index_list = [ i for i in range(NB_STEP)]
+    random.shuffle(index_list)
+    new_traj = np.zeros((1, NB_STEP*2))
+    for index in range(NB_STEP):
+      get_index = index_list[index]
+      new_traj[0][index] = self.scaled_traj_image[0][get_index]
+      new_traj[0][index+NB_STEP] = self.scaled_traj_image[0][get_index + NB_STEP]
+    self.scaled_traj_image = new_traj
+    return self.scaled_traj_image
 
   def get_scaled_image(self, _max, _min):
     data = self.cart_traj

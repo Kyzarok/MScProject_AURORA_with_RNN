@@ -940,11 +940,9 @@ def AURORA_incremental_ballistic_task(with_rnn, prefix):
 # Runs AURORA pretrained version, i.e. only trains autoencoder once and with more samples    
 def AURORA_pretrained_ballistic_task(with_rnn, prefix):
     comparison_gt = np.load("GROUND_TRUTH.npy")
-    # Randomly generate some controllers
+    # Uniformly sample some controllers
     training_pop = []                               # Container for training population
     dim = 100
-    if with_rnn == True:
-        dim = 170
     init_size = dim * dim                           # Initial size of population
     print("Creating population container")
     for b in range(init_size):
@@ -1434,7 +1432,8 @@ def plot_runs(ver):
     inc_LSTM_rmse = None
 
     if ver == 2:
-        prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        # prefix = "RUN_DATA/AURORA_AE_LSTM_pre"
+        prefix = "pre_original"
         np_name = prefix + "/mydata/pre_KLC.npy"
         pre_LSTM_klc = np.load(np_name)
         np_name = prefix + "/mydata/pre_repSize.npy"
@@ -1450,15 +1449,34 @@ def plot_runs(ver):
         np_name = prefix + "/mydata/inc_rmse.npy"
         inc_LSTM_rmse = np.load(np_name)
 
+
+    prefix = "pre_bigger_set"
+    np_name = prefix + "/mydata/pre_KLC.npy"
+    alt_pre_1_klc = np.load(np_name)
+    np_name = prefix + "/mydata/pre_repSize.npy"
+    alt_pre_1_rep = np.load(np_name)
+    np_name = prefix + "/mydata/pre_rmse.npy"
+    alt_pre_1_rmse = np.load(np_name)
+
+    prefix = "pre_more_train"
+    np_name = prefix + "/mydata/pre_KLC.npy"
+    alt_pre_2_klc = np.load(np_name)
+    np_name = prefix + "/mydata/pre_repSize.npy"
+    alt_pre_2_rep = np.load(np_name)
+    np_name = prefix + "/mydata/pre_rmse.npy"
+    alt_pre_2_rmse = np.load(np_name)
+
     # The KLC plots
     plt.clf()
-    plt.plot(hand_klc[0], c = "k", label = "Handcoded")
-    plt.plot(geno_klc[0], c = "b", label = "Genotype")
-    plt.plot(pre_klc[0], c = "m", label = "AURORA-AE Pretrained")
-    plt.plot(inc_klc[0], color="g", label = "AURORA-AE Incremental")
+    plt.plot(hand_klc[0], c = "k", label = "Handcoded", alpha = 0.7)
+    plt.plot(geno_klc[0], c = "b", label = "Genotype", alpha = 0.7)
+    plt.plot(pre_klc[0], c = "m", label = "AURORA-AE Pretrained", alpha = 0.7)
+    plt.plot(inc_klc[0], color="g", label = "AURORA-AE Incremental", alpha = 0.7)
     if ver == 2:
-        plt.plot(pre_LSTM_klc[0], c = 'c', label = "AURORA-AE-LSTM Pretrained")
-        plt.plot(inc_LSTM_klc[0], color="orange", label = "AURORA-AE-LSTM Incremental")
+        plt.plot(pre_LSTM_klc[0], color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha = 0.7)
+        plt.plot(inc_LSTM_klc[0], color="orange", label = "AURORA-AE-LSTM Incremental", alpha = 0.7)
+        plt.plot(alt_pre_1_klc[0], c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
+        plt.plot(alt_pre_2_klc[0], color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("KLC Score")
     title = "Kullback-Leibler Coverage Score of x Dimension per Generation"
@@ -1470,13 +1488,15 @@ def plot_runs(ver):
         plt.savefig("extension_BIG_KLC_0", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
     plt.clf()
-    plt.plot(hand_klc[1], c = "k", label = "Handcoded")
-    plt.plot(geno_klc[1], c = "b", label = "Genotype")
-    plt.plot(pre_klc[1], c = "m", label = "AURORA-AE Pretrained")
-    plt.plot(inc_klc[1], color="g", label = "AURORA-AE Incremental")
+    plt.plot(hand_klc[1], c = "k", label = "Handcoded", alpha = 0.7)
+    plt.plot(geno_klc[1], c = "b", label = "Genotype", alpha = 0.7)
+    plt.plot(pre_klc[1], c = "m", label = "AURORA-AE Pretrained", alpha = 0.7)
+    plt.plot(inc_klc[1], color="g", label = "AURORA-AE Incremental", alpha = 0.7)
     if ver == 2:
-        plt.plot(pre_LSTM_klc[1], c = 'c', label = "AURORA-AE-LSTM Pretrained")
-        plt.plot(inc_LSTM_klc[1], color="orange", label = "AURORA-AE-LSTM Incremental")
+        plt.plot(pre_LSTM_klc[1], color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha = 0.7)
+        plt.plot(inc_LSTM_klc[1], color="orange", label = "AURORA-AE-LSTM Incremental", alpha = 0.7)
+        plt.plot(alt_pre_1_klc[1], c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
+        plt.plot(alt_pre_2_klc[1], color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("KLC Score")
     title = "Kullback-Leibler Coverage Score of y Dimension per Generation"
@@ -1494,6 +1514,8 @@ def plot_runs(ver):
     avg_inc_klc = []
     avg_pre_LSTM_klc = []
     avg_inc_LSTM_klc = []
+    alt_pre_1_avg_klc = []
+    alt_pre_2_avg_klc = []
     for  i in range(len(hand_klc[0])):
         tot = hand_klc[0][i] + hand_klc[1][i]
         avg_hand_klc.append(tot/2)
@@ -1509,14 +1531,22 @@ def plot_runs(ver):
             tot = inc_LSTM_klc[0][i] + inc_LSTM_klc[1][i]
             avg_inc_LSTM_klc.append(tot/2)
 
+            tot = alt_pre_1_klc[0][i] + alt_pre_1_klc[1][i]
+            alt_pre_1_avg_klc.append(tot/2)
+           
+            tot = alt_pre_2_klc[0][i] + alt_pre_2_klc[1][i]
+            alt_pre_2_avg_klc.append(tot/2)
+
     plt.clf()
-    plt.plot(avg_hand_klc, c = "k", label = "Handcoded")
-    plt.plot(avg_geno_klc, c = "b", label = "Genotype")
-    plt.plot(avg_pre_klc, c = "m", label = "AURORA-AE Pretrained")
-    plt.plot(avg_inc_klc, color="g", label = "AURORA-AE Incremental")
+    plt.plot(avg_hand_klc, c = "k", label = "Handcoded", alpha = 0.7)
+    plt.plot(avg_geno_klc, c = "b", label = "Genotype", alpha = 0.7)
+    plt.plot(avg_pre_klc, c = "m", label = "AURORA-AE Pretrained", alpha = 0.7)
+    plt.plot(avg_inc_klc, color="g", label = "AURORA-AE Incremental", alpha = 0.7)
     if ver == 2:
-        plt.plot(avg_pre_LSTM_klc, c = 'c', label = "AURORA-AE-LSTM Pretrained")
-        plt.plot(avg_inc_LSTM_klc, color="orange", label = "AURORA-AE-LSTM Incremental")
+        plt.plot(avg_pre_LSTM_klc, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha = 0.7)
+        plt.plot(avg_inc_LSTM_klc, color="orange", label = "AURORA-AE-LSTM Incremental", alpha = 0.7)
+        plt.plot(alt_pre_1_avg_klc, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
+        plt.plot(alt_pre_2_avg_klc, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("Average KLC Score")
     title = "Average KLC Score (across dimensions) per Generation"
@@ -1534,8 +1564,10 @@ def plot_runs(ver):
     plt.plot(pre_rep, c = "m", label = "AURORA-AE Pretrained")
     plt.plot(inc_rep, c = "g", label = "AURORA-AE Incremental")
     if ver == 2:
-        plt.plot(pre_LSTM_rep, c = 'c', label = "AURORA-AE-LSTM Pretrained")
+        plt.plot(pre_LSTM_rep, color="aqua", label = "AURORA-AE-LSTM Pretrained")
         plt.plot(inc_LSTM_rep, color="orange", label = "AURORA-AE-LSTM Incremental")
+        plt.plot(alt_pre_1_rep, c = 'r', label = "LSTM Pre with more data")
+        plt.plot(alt_pre_2_rep, color = 'chartreuse', label = "LSTM Pre with more training")
     plt.xlabel("Generation")
     plt.ylabel("Repertoire Size")
     title = "Repertoire Size per Generation"
@@ -1551,8 +1583,10 @@ def plot_runs(ver):
     plt.plot(pre_rmse, c = "m", label = "AURORA-AE Pretrained", alpha=0.7)
     plt.plot(inc_rmse, c = "g", label = "AURORA-AE Incremental", alpha=0.7)
     if ver == 2:
-        plt.plot(pre_LSTM_rmse, c = 'c', label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
+        plt.plot(pre_LSTM_rmse, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
         plt.plot(inc_LSTM_rmse, color="orange", label = "AURORA-AE-LSTM Incremental", alpha=0.7)
+        plt.plot(alt_pre_1_rmse, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
+        plt.plot(alt_pre_2_rmse, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
     plt.xlabel("Generation")
     plt.ylabel("RMS Error")
     title = "Reconstruction Error per Generation"
@@ -1562,6 +1596,85 @@ def plot_runs(ver):
         plt.savefig("original_BIG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
         plt.savefig("extension_BIG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+    i = 49
+    pre_avg_rmse = [ 0 for x in range(i) ]
+    inc_avg_rmse = [ 0 for x in range(i) ]
+    pre_LSTM_avg_rmse = [ 0 for x in range(i) ]
+    inc_LSTM_avg_rmse = [ 0 for x in range(i) ]
+    alt_pre_1_avg_rmse = [ 0 for x in range(i) ]
+    alt_pre_2_avg_rmse = [ 0 for x in range(i) ]
+
+
+    pre_ex_avg_klc = [ 0 for x in range(i) ]
+    inc_ex_avg_klc = [ 0 for x in range(i) ]
+    hand_ex_avg_klc = [ 0 for x in range(i) ]
+    geno_ex_avg_klc = [ 0 for x in range(i) ]
+    pre_LSTM_ex_avg_klc = [ 0 for x in range(i) ]
+    inc_LSTM_ex_avg_klc = [ 0 for x in range(i) ]
+    alt_pre_1_ex_avg_klc = [ 0 for x in range(i) ]
+    alt_pre_2_ex_avg_klc = [ 0 for x in range(i) ]
+
+    for index in range(4950):
+        pre_avg_rmse.append(np.mean(pre_rmse[index : index + 50]))
+        inc_avg_rmse.append(np.mean(inc_rmse[index : index + 50]))
+
+        pre_ex_avg_klc.append(np.mean(avg_pre_klc[index : index + 50]))
+        inc_ex_avg_klc.append(np.mean(avg_inc_klc[index : index + 50]))
+        hand_ex_avg_klc.append(np.mean(avg_hand_klc[index : index + 50]))
+        geno_ex_avg_klc.append(np.mean(avg_geno_klc[index : index + 50]))
+        if ver == 2:
+
+            pre_LSTM_avg_rmse.append(np.mean(pre_LSTM_rmse[index : index + 50]))
+            inc_LSTM_avg_rmse.append(np.mean(inc_LSTM_rmse[index : index + 50]))
+            alt_pre_1_avg_rmse.append(np.mean(alt_pre_1_rmse[index : index + 50]))
+            alt_pre_2_avg_rmse.append(np.mean(alt_pre_2_rmse[index : index + 50]))
+
+            pre_LSTM_ex_avg_klc.append(np.mean(avg_pre_LSTM_klc[index : index + 50]))
+            inc_LSTM_ex_avg_klc.append(np.mean(avg_inc_LSTM_klc[index : index + 50]))
+            alt_pre_1_ex_avg_klc.append(np.mean(alt_pre_1_avg_klc[index : index + 50]))
+            alt_pre_2_ex_avg_klc.append(np.mean(alt_pre_2_avg_klc[index : index + 50]))
+    
+    plt.clf()
+    plt.plot(pre_avg_rmse, c = "m", label = "AURORA-AE Pretrained", alpha=0.7)
+    plt.plot(inc_avg_rmse, c = "g", label = "AURORA-AE Incremental", alpha=0.7)
+    if ver == 2:
+        plt.plot(pre_LSTM_avg_rmse, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
+        plt.plot(inc_LSTM_avg_rmse, color="orange", label = "AURORA-AE-LSTM Incremental", alpha=0.7)
+        plt.plot(alt_pre_1_avg_rmse, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
+        plt.plot(alt_pre_2_avg_rmse, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
+    plt.xlabel("Generation")
+    plt.ylabel("Average RMS Error")
+    plt.xlim(50, 5000)
+    title = "Reconstruction Error Averaged across Last 50 Generations"
+    plt.title(title)
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    if ver == 1:
+        plt.savefig("original_BIG_AVG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
+    else:
+        plt.savefig("extension_BIG_AVG_RMSE", bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+    plt.clf()
+    plt.plot(pre_ex_avg_klc, c = "m", label = "AURORA-AE Pretrained", alpha=0.7)
+    plt.plot(inc_ex_avg_klc, c = "g", label = "AURORA-AE Incremental", alpha=0.7)
+
+    plt.plot(hand_ex_avg_klc, c = "k", label = "Handcoded", alpha=0.7)
+    plt.plot(geno_ex_avg_klc, c = "b", label = "Genotype", alpha=0.7)
+    if ver == 2:
+        plt.plot(pre_LSTM_ex_avg_klc, color="aqua", label = "AURORA-AE-LSTM Pretrained", alpha=0.7)
+        plt.plot(inc_LSTM_ex_avg_klc, color="orange", label = "AURORA-AE-LSTM Incremental", alpha=0.7)
+        plt.plot(alt_pre_1_ex_avg_klc, c = 'r', label = "LSTM Pre with more data", alpha = 0.7)
+        plt.plot(alt_pre_2_ex_avg_klc, color = 'chartreuse', label = "LSTM Pre with more training", alpha = 0.7)
+    plt.xlabel("Generation")
+    plt.ylabel("Average KLC Score across dimensions")
+    plt.xlim(50, 5000)
+    title = "Average KLC Score Averaged across Last 50 Generations"
+    plt.title(title)
+    lgd = plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    if ver == 1:
+        plt.savefig("original_BIG_EX_AVG_KLC", bbox_extra_artists=(lgd,), bbox_inches='tight')
+    else:
+        plt.savefig("extension_BIG_EX_AVG_KLC", bbox_extra_artists=(lgd,), bbox_inches='tight')
 
 def fill_latent(prefix, with_rnn):
     pop = []                               # Container for training population
