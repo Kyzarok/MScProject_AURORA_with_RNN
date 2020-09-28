@@ -1,4 +1,4 @@
-# MScProjectRepo
+# MScProject_AURORA_with_RNN
 Extending Autonomous Skill Discovery with Recurrent Neural Networks
 
 Project Supervisors: Dr Danesh Tarapore, Dr David Bossens
