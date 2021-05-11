@@ -1,6 +1,8 @@
 UPDATED INFO:
 We are not using docker anymore but singularity instead.
+
 https://sylabs.io/guides/3.5/user-guide/
+
 Install singularity and run the “start_container.sh” script in the singularity folder. This will compile a “sandbox” container and give you access to a shell inside the container.
 From there, you just have to do: cd /git/sferes2/ and then ./setup.sh. The setup.sh will do the ./waf configure and ./waf to compile the experiments. This compilation will create an executable in the build folder.
 
