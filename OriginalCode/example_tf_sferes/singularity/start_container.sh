@@ -33,6 +33,6 @@ if [ -f "$IMAGENAME" ] || [ -d "$IMAGENAME" ]; then
     echo "$IMAGENAME exists"
 else
     echo "$IMAGENAME does not exist, building it now from $DEFNAME"
-    sudo singularity build --force --fakeroot $BLD_ARGS $IMAGENAME $DEFNAME
+    sudo singularity build --force $BLD_ARGS $IMAGENAME $DEFNAME
 fi
-singularity shell --fakeroot $RUN_ARGS --bind $(pwd)/../..:/git/sferes2/exp $IMAGENAME
+sudo singularity shell $RUN_ARGS --bind $(pwd)/../..:/git/sferes2/exp $IMAGENAME
