@@ -7,14 +7,11 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-import os
-import sys
 import numpy as np
-# import cv2
+
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 
-import tensorflow as tf2
 
 def xavier_init(shape, constant=1):
     """ Xavier initialization of network weights"""
@@ -96,6 +93,8 @@ class MaxPooling2D(object):
         if ksize == None:
             ksize = [1, 2, 2, 1]
             self.ksize = ksize
+        else:
+            self.ksize=ksize
     
     def output(self):
         self.output = tf.nn.max_pool(self.input, ksize=self.ksize,

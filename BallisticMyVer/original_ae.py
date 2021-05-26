@@ -2,31 +2,38 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior() 
 from tensorflow.python.ops import math_ops
 
 from original_my_nn_lib import Convolution2D, MaxPooling2D, Conv2Dtranspose
-from original_my_nn_lib import FullConnected, ReadOutLayer
+from original_my_nn_lib import FullConnected
 from original_my_nn_lib import LSTM_layer
 
 
 class AE(object):
-    
+    lr_init = 0.1
+    lr_decay = 0.9
+    clip_norm=5.0
+    traj_length = 50
+    latent_dim = 2
+    output_neurons = 100
+    dense_neurons = 5
+    patch_size_convol=(2, 6)
+    patch_size_pool=[1, 2, 2, 1]
+    spatial_dims=2
     def __init__(self, with_rnn, num_epoch):
         # Same settings for both networks
         self.n_epoch = num_epoch
-        self.traj_length = 50
-        self.latent_dim = 2
+
         self.global_step = tf.placeholder(tf.int32, shape=(), name="step_id")
         self.keep_prob = tf.placeholder(tf.float32, name="keep_prob")
 
         self.x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="input_x")
-        self.x_image = tf.reshape(self.x, [-1, 2, self.traj_length, 1])
+        self.x_image = tf.reshape(self.x, [-1, self.spatial_dims, self.traj_length, 1])
 
         if with_rnn == True:
-            self.true_x = tf.placeholder(tf.float32, [None, self.traj_length*2], name="true_x")
+            self.true_x = tf.placeholder(tf.float32, [None, self.traj_length*self.spatial_dims], name="true_x")
             self.new_rnn_input = tf.placeholder(tf.float32, [None, self.traj_length], name="rnn_input")
 
         self.create_net(with_rnn)
@@ -36,10 +43,10 @@ class AE(object):
         self.saver = tf.train.Saver(tf.trainable_variables())
 
     def create_optimizer(self):
-        self.learning_rate = tf.train.exponential_decay(0.1, self.global_step, self.n_epoch, 0.9,name="learning_rate")
+        self.learning_rate = tf.train.exponential_decay(self.lr_init, self.global_step, self.n_epoch, self.lr_decay,name="learning_rate")
         optimizer=tf.train.AdagradOptimizer(self.learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(self.loss))
-        gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
+        gradients, _ = tf.clip_by_global_norm(gradients, self.clip_norm)
         self.train_step = optimizer.apply_gradients(zip(gradients, variables), name="train_step")
         
         self.reset_optimizer_op = tf.variables_initializer(optimizer.variables(), name="reset_optimizer")
@@ -51,21 +58,21 @@ class AE(object):
 
         self.layers=[self.x_image]
         with tf.variable_scope('encoder') as vs:
-            self.create_encoder_conv([2])
-            self.create_encoder_fc([5])
+            self.create_encoder_conv([self.spatial_dims])
+            self.create_encoder_fc([self.dense_neurons])
 
             self.latent = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], self.latent_dim, activation='identity', name = "latent").output()
             self.layers.append(self.latent)
 
         with tf.variable_scope('decoder') as vs:
-            self.create_decoder_fc([5, self.traj_length * 2],[-1, self.traj_length, 2, 1])
-            self.create_decoder_conv([2,1])
+            self.create_decoder_fc([self.dense_neurons, self.traj_length * self.spatial_dims],[-1, self.traj_length, self.spatial_dims, 1])
+            self.create_decoder_conv([self.spatial_dims,1])
             
             print("Last layer")
             print (self.layers[-1].get_shape().as_list())
-            res=tf.reshape(self.layers[-1], [-1, self.traj_length*2], name = "reconstructed")
+            res=tf.reshape(self.layers[-1], [-1, self.traj_length*self.spatial_dims], name = "reconstructed")
             self.layers.append(res)
-            self.decoded  = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], 100, activation = 'identity', name = "decoded").output()
+            self.decoded  = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], self.output_neurons, activation = 'identity', name = "decoded").output()
 
             self.layers.append(self.decoded)
 
@@ -102,13 +109,19 @@ class AE(object):
         
     def create_encoder_conv(self, conf):
         for i in range(len(conf)):
-            conv = Convolution2D(self.layers[-1], (self.layers[-1].get_shape().as_list()[1], self.layers[-1].get_shape().as_list()[2]), self.layers[-1].get_shape().as_list()[3], conf[i],(2, 6), activation='leaky_relu')
+            # input, input_siz, in_ch, out_ch, patch_siz, activation='relu'
+            conv = Convolution2D(input=self.layers[-1], 
+                input_siz=(self.layers[-1].get_shape().as_list()[1], self.layers[-1].get_shape().as_list()[2]), 
+                in_ch=self.layers[-1].get_shape().as_list()[3], 
+                out_ch=conf[i],
+                patch_siz=self.patch_size_convol, 
+                activation='leaky_relu')
             self.layers.append(conv.output())
-            pool = MaxPooling2D(self.layers[-1])
+            pool = MaxPooling2D(input=self.layers[-1],ksize=self.patch_size_pool) # 2x2 patch by default
             self.layers.append(pool.output())
 
     def create_decoder_conv(self, conf):
         for i in range(len(conf)):
             conv_t = Conv2Dtranspose(self.layers[-1],(self.layers[-1].get_shape().as_list()[1], self.layers[-1].get_shape().as_list()[2]), self.layers[-1].get_shape().as_list()[3], conf[i],
-                                     (2, 6), activation='leak_relu')
+                                     self.patch_size_convol, activation='leak_relu')
             self.layers.append(conv_t.output())
