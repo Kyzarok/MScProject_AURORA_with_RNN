@@ -22,6 +22,7 @@ class AE(object):
     patch_size_convol=(2, 6)
     patch_size_pool=[1, 2, 2, 1]
     spatial_dims=2
+    output_channels=2
     def __init__(self, with_rnn, num_epoch):
         # Same settings for both networks
         self.n_epoch = num_epoch
@@ -58,7 +59,7 @@ class AE(object):
 
         self.layers=[self.x_image]
         with tf.variable_scope('encoder') as vs:
-            self.create_encoder_conv([self.spatial_dims])
+            self.create_encoder_conv([self.output_channels])
             self.create_encoder_fc([self.dense_neurons])
 
             self.latent = FullConnected(self.layers[-1], self.layers[-1].get_shape().as_list()[1], self.latent_dim, activation='identity', name = "latent").output()
@@ -66,7 +67,7 @@ class AE(object):
 
         with tf.variable_scope('decoder') as vs:
             self.create_decoder_fc([self.dense_neurons, self.traj_length * self.spatial_dims],[-1, self.traj_length, self.spatial_dims, 1])
-            self.create_decoder_conv([self.spatial_dims,1])
+            self.create_decoder_conv([self.output_channels,1])
             
             print("Last layer")
             print (self.layers[-1].get_shape().as_list())
